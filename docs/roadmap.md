@@ -21,8 +21,9 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
 - ✅ Incremental (dual-table) rehashing in `Dict` — [ADR 0004](decisions/0004-incremental-rehashing.md)
 - ✅ Span-augmented skip list + `ZSet` sorted set — [ADR 0005](decisions/0005-skiplist-over-treemap.md)
 - ✅ JMH harness (`DictBenchmark`) for rehash throughput/latency
-- 🔶 Rehash p99 before/after numbers — benchmark exists; doesn't yet force the table *through* a
-  rehash under load (tracked)
+- ✅ Rehash p99 before/after — `DictSTW` control + `RehashSpikeBenchmark` isolate the resize-
+  triggering put: stop-the-world **347.6 ms** vs incremental **6.1 ms** (≈57×). See
+  [benchmarking-methodology.md](benchmarking-methodology.md) Headline 1
 - ✅ Wire `Z*` commands (`ZADD`/`ZRANK`/`ZRANGE`) through the RESP registry — sorted set is reachable
   over the wire, with a WRONGTYPE-guarded typed keyspace ([ADR 0007](decisions/0007-typed-keyspace.md))
 - ✅ `INCR` / `DECR` / `INCRBY` / `DECRBY` integer counters (overflow- and WRONGTYPE-guarded)

@@ -7,6 +7,9 @@ build week until it ships.
 ## [Unreleased] — Week 2
 
 ### Added
+- Rehash latency benchmark: a `DictSTW` stop-the-world control plus `RehashBenchmark` /
+  `RehashSpikeBenchmark`, quantifying incremental rehashing's ≈57× lower worst-case resize-trigger
+  latency (stop-the-world 347.6 ms → incremental 6.1 ms). See docs/benchmarking-methodology.md.
 - `TYPE` / `DBSIZE` / `FLUSHDB` / `FLUSHALL` keyspace commands (`TYPE` reports `string`/`zset`/`none`).
 - `INCR` / `DECR` / `INCRBY` / `DECRBY` integer counters: a missing key starts at 0, the value
   round-trips as a decimal string through `GET`/`SET`, and overflow / non-integer / WRONGTYPE are

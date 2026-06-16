@@ -163,15 +163,55 @@ the concurrent JFR recording. These two numbers must be reported together.
 
 ## Results (fill from Week 2 onward)
 
-**Environment:** _CPU model / core count / RAM_ · JDK 25 ·
-`-XX:+UseZGC -Xms_g -Xmx_g -XX:+AlwaysPreTouch -XX:SoftMaxHeapSize=_g`
+**Environment:** Intel Core i5-11300H (4C/8T @ 3.1 GHz) · 16 GB RAM · Windows 11 ·
+OpenJDK 25.0.2 · `-XX:+UseZGC -Xmx3g` · JMH `me.champeau.jmh` 0.7.2, fork = 1.
 
-### Headline 1 — incremental rehashing eliminates p99 spikes
+### Headline 1 — incremental rehashing removes the stop-the-world resize stall
 
-| Dict variant | p50 | p99 | p99.9 | max |
-| --- | --- | --- | --- | --- |
-| Full resize (stop-the-world) | — | — | — | — |
-| Incremental rehashing | — | — | — | — |
+The two engines are identical except for resize strategy:
+[`DictSTW`](../src/jmh/java/dev/devgurav/mnemo/bench/DictSTW.java) is a clone of `Dict` reusing the
+same chaining and `DictEntryPool`, with the dual-table incremental rehash replaced by a one-shot
+`resize()`. Any difference is therefore attributable to the rehash strategy alone.
+
+**Finding A — bulk inserts are indistinguishable.**
+[`RehashBenchmark`](../src/jmh/java/dev/devgurav/mnemo/bench/RehashBenchmark.java) (SampleTime,
+growth from empty, capacity 16 → 131 072):
+
+| engine | p50 | p90 | p99 | p99.9 | p100 |
+| --- | --- | --- | --- | --- | --- |
+| incremental | 0.20 µs | 0.40 µs | 1.20 µs | 26.1 µs | 4.1 ms\* |
+| stop-the-world | 0.10 µs | 0.20 µs | 0.80 µs | 24.1 µs | 3.7 ms\* |
+
+\* The p100 here is JIT/GC/safepoint noise common to **both** engines, not the resize: at this scale
+a single resize (~49 k entries) is below that noise floor, and `SampleTime` sub-samples a ~1-in-5 000
+event. The bulk of the distribution (p50–p99) is sub-microsecond and equal — which is precisely *why*
+a p99 number alone cannot tell this story. The cost is concentrated in a handful of resize-triggering
+puts, so it must be isolated, not sampled.
+
+**Finding B — the resize-triggering put is where they diverge.**
+[`RehashSpikeBenchmark`](../src/jmh/java/dev/devgurav/mnemo/bench/RehashSpikeBenchmark.java)
+(SingleShot, primed to the load-factor edge at capacity 4 194 304 ≈ 3.1 M entries, heap
+GC-stabilised so the working set is in old-gen, then the single threshold-crossing put is timed;
+n = 20):
+
+| engine | resize-triggering put (mean ± 99.9% CI) |
+| --- | --- |
+| incremental | **6.13 ms ± 1.47** |
+| stop-the-world | **347.6 ms ± 54.9**  (p50 339 ms, p100 459 ms) |
+
+→ **≈ 57× lower worst-case put latency.** The stop-the-world engine copies all ~3.1 M entries on the
+one put that crosses the load factor — a ~⅓-second stall. (On a promoted/old-gen keyspace each of
+those 3.1 M reference rewrites also pays ZGC's store barrier, which is what lifts it to ~350 ms; a
+fresh young-gen copy is cheaper but still tens of ms.) The incremental engine allocates the doubled
+backing array and migrates a single bucket on that put, spreading the rest across the next ~3.1 M
+operations.
+
+**Scope of the claim (honest).** Incremental rehashing removes the **O(n) copy** from the hot path;
+it does *not* make a resize free — both engines still pay the unavoidable doubled-array allocation
+(the ~6 ms is the cost of allocating and zeroing a 64 MB `DictEntry[]`). The win is the elimination of
+the stall, not a zero-cost grow. These are dev-profile numbers (laptop, single fork, n = 20):
+directional and reproducible (`jmh { includes.set(listOf("RehashSpikeBenchmark")) }`), not yet a
+publish-grade multi-fork run.
 
 ### Headline 2 — GC pause vs command latency (separate curves)
 

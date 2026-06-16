@@ -2,6 +2,38 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 (cont.) — Flagship benchmark: incremental vs stop-the-world rehash
+
+Closed the standing benchmark gap and put a defensible number on the project's headline claim.
+
+**Context.** The architecture rests on *incremental rehashing flattens the tail latency a
+stop-the-world resize spikes*. But `DictBenchmark` only measured steady state (a pre-grown table);
+the growth/resize behaviour — the whole point — was unmeasured.
+
+**What was built.** A control engine, `DictSTW` — a clone of `Dict` reusing the same chaining and
+`DictEntryPool`, with the dual-table rehash swapped for a naive one-shot `resize()`, so the only
+variable is the rehash strategy — plus two benchmarks: `RehashBenchmark` (SampleTime, growth from
+empty) and `RehashSpikeBenchmark` (SingleShot, isolates the resize-triggering put). Run under ZGC so a
+collector pause can't be mistaken for the algorithmic spike.
+
+**It took two tries, and I kept the first (negative) result.** `RehashBenchmark` (SampleTime) showed
+the two engines as identical — p99 ≈ 1 µs both, p100 ≈ 4 ms both — because at 65 k entries a single
+resize (~0.5 ms) sits below the JIT/GC noise floor, and SampleTime sub-samples a ~1-in-5 000 event.
+Diagnosed and fixed by isolating the resize-triggering put directly: a SingleShot benchmark primed to
+the load-factor edge of a much larger table (capacity 4 M, ~3.1 M-entry copy), heap GC-stabilised for
+a tight interval.
+
+**Finding.** The single put that crosses the load factor — stop-the-world **347.6 ms ± 54.9** vs
+incremental **6.13 ms ± 1.47**, ≈ **57×** lower worst-case latency. STW copies all 3.1 M entries in
+one shot (a ~⅓-second stall); incremental allocates the doubled array, migrates one bucket, and
+amortises the rest. Honest scope: incremental removes the O(n) *copy*, not the array *allocation* —
+both still pay ~6 ms to allocate the 64 MB backing array; the win is killing the stall. Bulk inserts
+(p50–p99) are equal between the engines. Full methodology, environment, and the negative-result
+write-up are in [benchmarking-methodology.md](benchmarking-methodology.md) Headline 1.
+
+**What's next.** A publish-grade multi-fork run + the GC-pause-vs-command-p99 split (Headline 2);
+then the remaining command surface (Hashes/Lists) and differential tests. See [roadmap](roadmap.md).
+
 ## Week 2 (cont.) — Keyspace commands (TYPE/DBSIZE/FLUSH)
 
 Added the keyspace introspection/admin surface: `TYPE`, `DBSIZE`, `FLUSHDB`, `FLUSHALL`.
