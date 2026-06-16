@@ -182,6 +182,31 @@ string.
 
 ---
 
+## 2c. Integer counter commands (Week 2)
+
+`INCR` / `DECR` / `INCRBY` / `DECRBY` treat a string key as a signed 64-bit integer. The value is
+stored as its decimal string, so a counter round-trips through `GET`/`SET`. A missing key is treated
+as `0`. Reply: integer — the value after the operation.
+
+| Command | Effect |
+| --- | --- |
+| `INCR key` | value + 1 |
+| `DECR key` | value − 1 |
+| `INCRBY key delta` | value + delta |
+| `DECRBY key delta` | value − delta |
+
+| Condition | Reply |
+| --- | --- |
+| Success | `:<new value>\r\n` |
+| Stored value isn't a 64-bit integer | `-ERR value is not an integer or out of range\r\n` |
+| `delta` isn't a 64-bit integer | `-ERR value is not an integer or out of range\r\n` |
+| Result would overflow `long` | `-ERR increment or decrement would overflow\r\n` |
+| Key holds a sorted set | `-WRONGTYPE Operation against a key holding the wrong kind of value\r\n` |
+
+On any error the stored value is left unchanged.
+
+---
+
 ## 3. Error conventions
 
 All error replies use the format `-<PREFIX> <human-readable message>\r\n`. Clients that
