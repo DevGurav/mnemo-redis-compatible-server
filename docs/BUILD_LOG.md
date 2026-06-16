@@ -2,6 +2,58 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 — Structures: incremental rehashing + the sorted set
+
+Turned the Week-1 `Dict` spec green and built the first ordered structure, then brought the project's
+documentation up to a professional engineering standard.
+
+**Context / problem.** Week 1 left `Dict` as a red spec and the keyspace running on a `HashMap`
+placeholder. The headline goal of the project is *flat p99*, and the obvious threat to it is table
+growth: a separate-chaining table that rehashes all at once stalls the single command thread for
+milliseconds on a large keyspace — and on this design a command-thread stall is a tail-latency spike
+for every connected client.
+
+**What was implemented.**
+
+- **Incremental, dual-table rehashing in `Dict`.** `ht[0]` drains into a double-sized `ht[1]` one
+  bucket at a time; every `put`/`remove` piggy-backs a single `rehashStep`, so the migration amortizes
+  across normal traffic instead of one pause. Reads probe both tables but never advance the cursor —
+  a lookup costs at most one extra bounded bucket probe. New keys during a rehash go into `ht[1]` so
+  they survive promotion; overwrites search both. Nodes are spliced between tables **by pointer**, so
+  the `DictEntry` pool is untouched during a move (occupancy and allocation pressure unchanged across a
+  resize). An empty-bucket cap (`steps × 10`) stops a sparse table from turning one step into a long
+  walk.
+- **`ZSet` sorted set on a span-augmented skip list.** Each forward pointer carries a `span` (level-0
+  edges crossed); summing spans along the search path gives exact rank in O(log n), which drives
+  `getByRank`/`range`. `ZSet` pairs the skip list with a `Dict` (member → 8-byte big-endian score) so
+  membership/score stay O(1) while rank/range stay O(log n). `MAX_LEVEL=32`, `P=0.25` (Redis defaults);
+  ties broken by unsigned lexicographic member order (Redis semantics).
+- **JMH harness** (`src/jmh/DictBenchmark`) for rehash throughput / sampled latency, with a dev-run
+  iteration profile.
+
+**Tradeoffs / decisions (now recorded as ADRs).** Separate chaining stays, with the GC concern
+answered by the entry pool rather than an open-addressing rewrite — [ADR 0003]. Incremental rehashing
+over full-table rehash — [ADR 0004]. Skip list over `TreeMap` (which gives O(n) rank) and over an
+augmented RB-tree (fiddlier, and diverges from Redis, costing differential-test parity) — [ADR 0005].
+Week-1 decisions (hand-rolled RESP2, single-threaded command execution) and the locked logical-
+`maxmemory` rule were backfilled as [ADR 0001], [ADR 0002], and [ADR 0006].
+
+**Results.** `./gradlew test` → 6 green (RESP codec + end-to-end). `./gradlew specTest` → **60 green**
+(`DictTest` 24, `DictPropertyTest` 1, `ZSetTest` 35, incl. randomized rank/range cross-checks against a
+brute-force reference and mid-rehash get/put/remove/overwrite).
+
+**What's next.** Wire `Z*` commands through the RESP registry so the sorted set is reachable over the
+wire; make the JMH benchmark force the table *through* a rehash under load to produce the p99
+before/after number; then Hashes/Lists + `INCR`/`TYPE`/`KEYS`/`INFO` and differential tests vs. a real
+Redis. See [roadmap](roadmap.md).
+
+[ADR 0001]: decisions/0001-hand-rolled-resp2-codec.md
+[ADR 0002]: decisions/0002-single-threaded-command-execution.md
+[ADR 0003]: decisions/0003-separate-chaining-with-entry-pool.md
+[ADR 0004]: decisions/0004-incremental-rehashing.md
+[ADR 0005]: decisions/0005-skiplist-over-treemap.md
+[ADR 0006]: decisions/0006-logical-maxmemory.md
+
 ## Architecture decisions — pre-Week-2 hardening (design + docs only, no code yet)
 
 Locked four execution-flaw patches into the [blueprint](act-as-a-senior-kind-waffle.md) and split the

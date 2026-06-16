@@ -6,9 +6,10 @@ protocol, so `redis-cli`, the `Jedis` client, and Redis's own `redis-benchmark` 
 server — but the core data structures (hash table, skip list, LRU/LFU eviction) are hand-written, not
 borrowed from `java.util`.
 
-> Status: **Week 1 — foundation.** Server, RESP2 codec, command dispatch, and the test harness are
-> done and green. The keyspace currently runs on a temporary `HashMap` placeholder; the from-scratch
-> `Dict` is specified by failing tests and waiting to be implemented (see below).
+> Status: **Week 2 — structures.** The from-scratch `Dict` is implemented with incremental rehashing,
+> and the first ordered structure — a span-augmented skip list behind a `ZSet` sorted set — is built
+> and unit-tested (`./gradlew test` → 6 green · `./gradlew specTest` → 60 green). Next: wire the
+> sorted-set commands through the RESP registry. See the [roadmap](docs/roadmap.md).
 
 ---
 
@@ -81,17 +82,21 @@ in [docs/architecture-spec.md](docs/architecture-spec.md) §1–§2.
 Engineering docs are version-controlled under [`docs/`](docs/):
 
 - [architecture-spec.md](docs/architecture-spec.md) — concurrency model, threading layout, memory boundaries.
+- [decisions/](docs/decisions/) — Architecture Decision Records: the *why* behind each design choice.
+- [roadmap.md](docs/roadmap.md) — what's done, in progress, and next.
 - [api-protocol.md](docs/api-protocol.md) — supported RESP commands + custom `INFO` metrics.
+- [data-model.md](docs/data-model.md) — keys, value types, sorted-set encoding.
+- [testing.md](docs/testing.md) — the plumbing-vs-spec test split and how to run each.
 - [benchmarking-methodology.md](docs/benchmarking-methodology.md) — JMH layout, async-profiler / JFR setup.
-- [the project blueprint](docs/act-as-a-senior-kind-waffle.md) — full design, decisions, and roadmap.
+- [glossary.md](docs/glossary.md) · [security.md](docs/security.md) · [runbook.md](docs/runbook.md) · [observability.md](docs/observability.md) · [troubleshooting.md](docs/troubleshooting.md)
 - [BUILD_LOG.md](docs/BUILD_LOG.md) — what was built and why, newest first.
 
 ## Roadmap
 
 | Week | Focus |
 | --- | --- |
-| **1 (now)** | Netty server, RESP2 codec, command dispatch, `Dict` spec, CI ✅ |
-| 2 | Incremental rehashing (+ JMH p99), skip list / sorted sets, differential tests vs real Redis |
+| 1 | Netty server, RESP2 codec, command dispatch, `Dict` spec, CI ✅ |
+| **2 (now)** | Incremental rehashing ✅, skip-list sorted set ✅, JMH harness ✅ — sorted-set commands + differential tests vs real Redis next |
 | 3 | TTL, LRU/LFU eviction + the logical-capacity safety protocol, `DictEntry` pool, AOF + crash recovery |
 | 4 | Keyspace sharding + benchmark, Docker/deploy, the [performance report](docs/benchmarking-methodology.md) |
 
@@ -104,7 +109,8 @@ src/main/java/dev/devgurav/mnemo/
   server/   MnemoServer, Config
   net/      Netty pipeline + net/resp/ RESP2 codec + value model
   command/  Command, CommandRegistry, + strings/ server/ handlers
-  store/    Db, KeyValueStore, HashMapStore (placeholder), Dict (YOURS)
-src/test/java/...   RespCodecTest, EndToEndTest (green) · DictTest, DictPropertyTest (red specs)
-docs/               architecture-spec.md · api-protocol.md · benchmarking-methodology.md · BUILD_LOG.md
+  store/    Db, KeyValueStore, HashMapStore (placeholder), Dict, SkipList, ZSet (hand-built) + entry/ (pool)
+src/test/java/...   RespCodecTest, EndToEndTest (plumbing, green) · DictTest, DictPropertyTest, ZSetTest (structure specs, green)
+src/jmh/java/...     DictBenchmark
+docs/               architecture-spec · api-protocol · benchmarking-methodology · data-model · testing · roadmap · glossary · decisions/ (ADRs) · BUILD_LOG · …
 ```
