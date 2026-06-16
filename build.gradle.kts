@@ -76,8 +76,10 @@ tasks.register<Test>("specTest") {
 }
 
 jmh {
-    warmupIterations.set(5)
-    iterations.set(10)
-    fork.set(2)
+    // Dev-run profile (fast turnaround). For a publish-grade run, raise to 5/10/2.
+    warmupIterations.set(3)
+    iterations.set(5)
+    fork.set(1)
     // tableSize parameter is declared via @Param in benchmark source — not set here.
+    // Benchmark modes (Throughput + SampleTime) are declared via @BenchmarkMode in source.
 }
