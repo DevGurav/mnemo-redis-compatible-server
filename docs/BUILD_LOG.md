@@ -2,6 +2,46 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 (cont.) — Sorted set over the wire
+
+Made the sorted set built last session actually reachable from a client: `ZADD`, `ZRANK`, `ZRANGE`
+now dispatch through the RESP registry.
+
+**Context / problem.** `ZSet` existed and was unit-tested, but the keyspace (`Db`) only modelled one
+value type — strings, as `key → byte[]`. To serve sorted-set commands a key has to be able to hold a
+`ZSet`, and Redis's contract is that a key holds *exactly one* type: a mismatched command must return
+`WRONGTYPE`, `SET` overwrites whatever was there, and `DEL`/`EXISTS` ignore type.
+
+**What was implemented.**
+
+- **Typed keyspace.** `Db` gained a second namespace (`key → ZSet`) alongside the string store, with
+  `isString`/`isZSet` guards. `SET` now evicts any sorted set under the key; `DEL`/`EXISTS`/`size`/
+  `flush` span both namespaces; `GET` on a sorted set returns `WRONGTYPE`.
+- **`ZADD key score member [score member …]`** — parses every score up front so a bad float can't
+  half-apply the command; returns the count of *newly added* members (updates don't count). Accepts
+  `inf`/`-inf`, rejects `nan`.
+- **`ZRANK key member`** — returns the member's rank. `ZSet.rank` is 1-based; Redis `ZRANK` is
+  **0-based**, so the handler subtracts one and returns a null bulk for an absent member or key.
+- **`ZRANGE key start stop [WITHSCORES]`** — translates Redis 0-based, end-relative, clamped indices
+  onto `ZSet.rangeByRank`'s 1-based inclusive ranks; `WITHSCORES` interleaves scores formatted the
+  Redis way (`1.0 → "1"`, infinities as `inf`/`-inf`).
+
+**Tradeoffs / decisions.** The sorted-set namespace is a plain `HashMap<String, ZSet>` for now rather
+than a refactor of `Dict` into a typed-value keyspace. The hand-built structures (string `Dict`, and
+the `SkipList`/`Dict` inside each `ZSet`) are untouched; only the outer key→value lookup for this one
+type is a library map. Unifying into a single typed keyspace dictionary is deferred until a third
+value type (Hashes/Lists) makes the parallel-namespace approach stop paying — recorded as
+[ADR 0007](decisions/0007-typed-keyspace.md). The two index-base mismatches (1-based `ZSet`/`SkipList`
+vs. Redis 0-based) are handled at the command boundary, keeping the structures' own API natural.
+
+**Results.** `./gradlew test` → **17 green** (added 11 in `SortedSetCommandsTest`: 0-based rank,
+negative/clamped range, `WITHSCORES` score formatting, `WRONGTYPE`, `SET` overwrite, cross-type
+`DEL`/`EXISTS`, invalid-float no-partial-apply, arity). `./gradlew specTest` → 60 green (unchanged).
+
+**What's next.** Differential tests replaying command sequences against a real `redis-server`; then
+`ZSCORE`/`ZRANGEBYSCORE` and the Hashes/Lists + `INCR`/`TYPE`/`KEYS`/`INFO` surface, toward the W2
+`redis-benchmark` milestone. See [roadmap](roadmap.md).
+
 ## Week 2 — Structures: incremental rehashing + the sorted set
 
 Turned the Week-1 `Dict` spec green and built the first ordered structure, then brought the project's

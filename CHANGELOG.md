@@ -7,10 +7,13 @@ build week until it ships.
 ## [Unreleased] — Week 2
 
 ### Added
+- `ZADD` / `ZRANK` / `ZRANGE` commands over the wire (RESP), with Redis 0-based rank semantics,
+  negative/clamped `ZRANGE` indices, `WITHSCORES`, and a WRONGTYPE-guarded typed keyspace
+  (one type per key; `SET` overwrites; `DEL`/`EXISTS` span types).
 - Incremental (dual-table) rehashing in `Dict`: buckets drain from the old table into a double-sized
   new one a few at a time across normal traffic, instead of one stop-the-world pass.
 - `ZSet` sorted set backed by a span-augmented skip list (O(log n) rank/range) paired with a `Dict`
-  (O(1) membership/score) — backs the future `ZADD`/`ZRANK`/`ZRANGE`.
+  (O(1) membership/score).
 - JMH benchmark harness (`src/jmh/`, `DictBenchmark`) for rehash throughput / sampled latency.
 - Engineering docs: Architecture Decision Records (`docs/decisions/`), `roadmap`, `testing`,
   `data-model`, `glossary`, `security`, `runbook`, `observability`, `troubleshooting`; plus
