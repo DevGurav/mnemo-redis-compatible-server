@@ -207,6 +207,17 @@ On any error the stored value is left unchanged.
 
 ---
 
+## 2d. Keyspace commands (Week 2)
+
+| Command | Reply | Notes |
+| --- | --- | --- |
+| `TYPE key` | simple string | `string`, `zset`, or `none` (absent key). More types as they land. |
+| `DBSIZE` | integer | Number of keys, across all value types. |
+| `FLUSHDB` | `+OK` | Empties the keyspace. `ASYNC`/`SYNC` option is a later week. |
+| `FLUSHALL` | `+OK` | Same as `FLUSHDB` today (single node, one logical DB); kept distinct for client compatibility. |
+
+---
+
 ## 3. Error conventions
 
 All error replies use the format `-<PREFIX> <human-readable message>\r\n`. Clients that

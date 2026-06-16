@@ -1,5 +1,9 @@
 package dev.devgurav.mnemo.command;
 
+import dev.devgurav.mnemo.command.keyspace.DbSizeCommand;
+import dev.devgurav.mnemo.command.keyspace.FlushAllCommand;
+import dev.devgurav.mnemo.command.keyspace.FlushDbCommand;
+import dev.devgurav.mnemo.command.keyspace.TypeCommand;
 import dev.devgurav.mnemo.command.server.CommandCommand;
 import dev.devgurav.mnemo.command.server.EchoCommand;
 import dev.devgurav.mnemo.command.server.PingCommand;
@@ -61,6 +65,10 @@ public final class CommandRegistry {
         r.register("ZADD", new ZAddCommand());
         r.register("ZRANK", new ZRankCommand());
         r.register("ZRANGE", new ZRangeCommand());
+        r.register("TYPE", new TypeCommand());
+        r.register("DBSIZE", new DbSizeCommand());
+        r.register("FLUSHDB", new FlushDbCommand());
+        r.register("FLUSHALL", new FlushAllCommand());
         return r;
     }
 }
