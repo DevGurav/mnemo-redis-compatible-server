@@ -76,10 +76,12 @@ tasks.register<Test>("specTest") {
 }
 
 jmh {
-    // Dev-run profile (fast turnaround). For a publish-grade run, raise to 5/10/2.
-    warmupIterations.set(3)
-    iterations.set(5)
     fork.set(1)
-    // tableSize parameter is declared via @Param in benchmark source — not set here.
-    // Benchmark modes (Throughput + SampleTime) are declared via @BenchmarkMode in source.
+    // Measure under the production GC so a young-gen pause can't masquerade as an algorithmic
+    // spike; the headroom keeps the growth benchmark's transient garbage off the critical path.
+    jvmArgsAppend.set(listOf("-XX:+UseZGC", "-Xmx3g"))
+    // Per-benchmark profiles live in source annotations (so each is reproducible as reported):
+    //   DictBenchmark / RehashBenchmark — 3 warmup, 5 measurement (dev profile), @Param/@BenchmarkMode.
+    //   RehashSpikeBenchmark           — 5 warmup, 20 measurement (SingleShot needs more samples).
+    // To run a single experiment: jmh { includes.set(listOf("RehashSpikeBenchmark")) }.
 }
