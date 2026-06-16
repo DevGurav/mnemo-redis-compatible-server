@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+# keep the wrapper jar tracked (it bootstraps the build)
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+out/
+bin/
+
+# JVM / diagnostics
+*.log
+gc.log*
+hs_err_pid*
+*.jfr
+replay_pid*
+
+# OS
+.DS_Store
+Thumbs.db

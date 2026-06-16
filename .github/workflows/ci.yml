@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle (with caching)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build + green tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew build
+
+      # The data-structure specs (Dict, SkipList, ...) are tagged "spec" and excluded from `build`
+      # until implemented. Enable this gate once they are green:
+      # - name: Data-structure specs
+      #   run: ./gradlew specTest

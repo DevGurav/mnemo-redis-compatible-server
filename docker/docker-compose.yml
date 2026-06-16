@@ -1,0 +1,17 @@
+# Run Mnemo (and, later, a real Redis alongside it for differential comparison).
+# Usage:  docker compose -f docker/docker-compose.yml up --build
+services:
+  mnemo:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "6379:6379"
+    environment:
+      MNEMO_USE_DICT: "false"   # flip to "true" once your Dict spec is green
+
+  # Uncomment to run a real Redis on :6380 for side-by-side / differential testing:
+  # redis:
+  #   image: redis:7
+  #   ports:
+  #     - "6380:6379"
