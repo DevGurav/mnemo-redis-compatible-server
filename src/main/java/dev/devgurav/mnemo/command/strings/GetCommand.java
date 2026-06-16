@@ -11,7 +11,11 @@ public final class GetCommand implements Command {
         if (ctx.argCount() != 2) {
             return RespValue.error("ERR wrong number of arguments for 'get' command");
         }
-        byte[] value = ctx.db().get(ctx.argString(1));
+        String key = ctx.argString(1);
+        if (ctx.db().isZSet(key)) {
+            return RespValue.error("WRONGTYPE Operation against a key holding the wrong kind of value");
+        }
+        byte[] value = ctx.db().get(key);
         return value == null ? RespValue.nullBulk() : RespValue.bulk(value);
     }
 }

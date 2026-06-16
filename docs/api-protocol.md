@@ -144,6 +144,44 @@ $<kNlen>\r\n<keyN>\r\n
 
 ---
 
+## 2b. Sorted-set commands (Week 2)
+
+A key may hold a sorted set instead of a string. A key holds exactly one type: running a sorted-set
+command on a string key (or `GET` on a sorted set) returns `-WRONGTYPE …`; `SET` overwrites any prior
+type; `DEL`/`EXISTS` work across types. Members are ordered by `score` ascending, ties broken by
+unsigned byte order on the member.
+
+### `ZADD key score member [score member ...]`
+
+Adds members, or updates the score of members that already exist. Reply: integer — the number of
+members **newly added** (updated members are not counted). Flags (`NX`/`XX`/`GT`/`LT`/`CH`/`INCR`) are
+a later week.
+
+| Condition | Reply |
+| --- | --- |
+| Members added/updated | `:<new members>\r\n` |
+| Key holds a string | `-WRONGTYPE Operation against a key holding the wrong kind of value\r\n` |
+| A score isn't a valid float | `-ERR value is not a valid float\r\n` (nothing is applied) |
+| Missing/odd score-member args | `-ERR wrong number of arguments for 'zadd' command\r\n` |
+
+Scores accept `inf` / `+inf` / `-inf`; `nan` is rejected.
+
+### `ZRANK key member`
+
+Reply: integer — the member's **0-based** rank (lowest score = `0`), or a null bulk (`$-1`) if the
+member or the key is absent. `-WRONGTYPE` if the key holds a string.
+
+### `ZRANGE key start stop [WITHSCORES]`
+
+Returns members whose **0-based** rank is in `[start, stop]`, ascending. Indices may be negative
+(from the end: `-1` is the last member) and are clamped to the set's bounds; an empty or inverted
+range yields an empty array. With `WITHSCORES`, each member is followed by its score as a bulk string
+(integral scores print without a decimal point: `1.0` → `1`; infinities as `inf`/`-inf`). The
+index form only — `BYSCORE`/`BYLEX`/`REV`/`LIMIT` are a later week. `-WRONGTYPE` if the key holds a
+string.
+
+---
+
 ## 3. Error conventions
 
 All error replies use the format `-<PREFIX> <human-readable message>\r\n`. Clients that

@@ -24,3 +24,4 @@ settled question.
 | [0004](0004-incremental-rehashing.md) | Dual-table incremental rehashing | Accepted |
 | [0005](0005-skiplist-over-treemap.md) | Span-augmented skip list for the sorted set (not `TreeMap`) | Accepted |
 | [0006](0006-logical-maxmemory.md) | `maxmemory` as logical capacity, not physical heap weighing | Accepted (impl scheduled W3) |
+| [0007](0007-typed-keyspace.md) | Separate sorted-set namespace, WRONGTYPE-guarded (unified typed keyspace deferred) | Accepted |

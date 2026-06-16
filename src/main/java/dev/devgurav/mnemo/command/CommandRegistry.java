@@ -3,6 +3,9 @@ package dev.devgurav.mnemo.command;
 import dev.devgurav.mnemo.command.server.CommandCommand;
 import dev.devgurav.mnemo.command.server.EchoCommand;
 import dev.devgurav.mnemo.command.server.PingCommand;
+import dev.devgurav.mnemo.command.sortedset.ZAddCommand;
+import dev.devgurav.mnemo.command.sortedset.ZRangeCommand;
+import dev.devgurav.mnemo.command.sortedset.ZRankCommand;
 import dev.devgurav.mnemo.command.strings.DelCommand;
 import dev.devgurav.mnemo.command.strings.ExistsCommand;
 import dev.devgurav.mnemo.command.strings.GetCommand;
@@ -47,6 +50,9 @@ public final class CommandRegistry {
         r.register("GET", new GetCommand());
         r.register("DEL", new DelCommand());
         r.register("EXISTS", new ExistsCommand());
+        r.register("ZADD", new ZAddCommand());
+        r.register("ZRANK", new ZRankCommand());
+        r.register("ZRANGE", new ZRangeCommand());
         return r;
     }
 }
