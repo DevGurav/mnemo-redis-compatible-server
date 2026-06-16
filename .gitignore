@@ -23,3 +23,9 @@ replay_pid*
 # OS
 .DS_Store
 Thumbs.db
+
+# internal plans
+docs/act-as-a-senior-kind-waffle.md
+
+# test artifacts
+.jqwik-database
