@@ -25,7 +25,8 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
   rehash under load (tracked)
 - ✅ Wire `Z*` commands (`ZADD`/`ZRANK`/`ZRANGE`) through the RESP registry — sorted set is reachable
   over the wire, with a WRONGTYPE-guarded typed keyspace ([ADR 0007](decisions/0007-typed-keyspace.md))
-- ⬜ Hashes, Lists; `INCR` `TYPE` `KEYS` `INFO`
+- ✅ `INCR` / `DECR` / `INCRBY` / `DECRBY` integer counters (overflow- and WRONGTYPE-guarded)
+- ⬜ Hashes, Lists; `TYPE` `KEYS` `INFO`
 - ⬜ Differential tests vs. a real Redis instance
 
 *Milestone target: first `redis-benchmark` numbers.*

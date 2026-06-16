@@ -7,6 +7,9 @@ build week until it ships.
 ## [Unreleased] — Week 2
 
 ### Added
+- `INCR` / `DECR` / `INCRBY` / `DECRBY` integer counters: a missing key starts at 0, the value
+  round-trips as a decimal string through `GET`/`SET`, and overflow / non-integer / WRONGTYPE are
+  rejected without changing the stored value.
 - `ZADD` / `ZRANK` / `ZRANGE` commands over the wire (RESP), with Redis 0-based rank semantics,
   negative/clamped `ZRANGE` indices, `WITHSCORES`, and a WRONGTYPE-guarded typed keyspace
   (one type per key; `SET` overwrites; `DEL`/`EXISTS` span types).

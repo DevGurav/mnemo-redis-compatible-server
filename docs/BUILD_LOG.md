@@ -2,6 +2,32 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 (cont.) — Integer counters (INCR/DECR)
+
+Added the `INCR` / `DECR` / `INCRBY` / `DECRBY` family — the next command surface toward the
+`redis-benchmark` milestone (`INCR` is one of its default workloads).
+
+**Context.** Redis models a counter as an ordinary string whose value happens to be a decimal
+integer, so a counter must round-trip through `GET`/`SET`. The work is the command-layer arithmetic
+and its error contract, not a new structure.
+
+**What was implemented.** A shared `NumericString.apply(key, operand, subtract)` helper: a missing key
+starts at 0; the current value is parsed as a signed 64-bit integer; the delta is applied with
+`Math.addExact`/`subtractExact`; the decimal-string result is written back. The four commands are thin
+wrappers (`INCR`/`DECR` pass operand 1; `INCRBY`/`DECRBY` parse the delta first).
+
+**Error contract (matches Redis).** Non-integer stored value or non-integer delta →
+`ERR value is not an integer or out of range`; a result outside `long` →
+`ERR increment or decrement would overflow`; a sorted-set key → `WRONGTYPE`. On any error the stored
+value is left untouched (overflow is checked *before* the write).
+
+**Results.** `./gradlew test` → **27 green** (added 10 in `StringNumberCommandsTest`: missing-key-is-
+zero, decimal round-trip via `GET`, `INCRBY`/`DECRBY` deltas, non-integer value/delta, overflow and
+underflow rejection with the value preserved, `WRONGTYPE`, arity). `specTest` → 60 green (unchanged).
+
+**What's next.** `TYPE`/`DBSIZE` introspection and the Hashes/Lists surface; differential tests vs. a
+real `redis-server`. See [roadmap](roadmap.md).
+
 ## Week 2 (cont.) — Sorted set over the wire
 
 Made the sorted set built last session actually reachable from a client: `ZADD`, `ZRANK`, `ZRANGE`
