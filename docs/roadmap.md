@@ -26,7 +26,8 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
 - ✅ Wire `Z*` commands (`ZADD`/`ZRANK`/`ZRANGE`) through the RESP registry — sorted set is reachable
   over the wire, with a WRONGTYPE-guarded typed keyspace ([ADR 0007](decisions/0007-typed-keyspace.md))
 - ✅ `INCR` / `DECR` / `INCRBY` / `DECRBY` integer counters (overflow- and WRONGTYPE-guarded)
-- ⬜ Hashes, Lists; `TYPE` `KEYS` `INFO`
+- ✅ `TYPE` / `DBSIZE` / `FLUSHDB` / `FLUSHALL` keyspace commands
+- ⬜ Hashes, Lists; `KEYS` `INFO`
 - ⬜ Differential tests vs. a real Redis instance
 
 *Milestone target: first `redis-benchmark` numbers.*

@@ -20,7 +20,7 @@ MNEMO_USE_DICT=true ./gradlew run   # run on the from-scratch Dict
 ./gradlew jmh        # JMH benchmarks (src/jmh/)
 ```
 
-Current state: `./gradlew test` → 27 green; `./gradlew specTest` → 60 green.
+Current state: `./gradlew test` → 33 green; `./gradlew specTest` → 60 green.
 
 ## Where things live
 

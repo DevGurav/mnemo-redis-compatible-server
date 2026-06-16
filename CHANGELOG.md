@@ -7,6 +7,7 @@ build week until it ships.
 ## [Unreleased] — Week 2
 
 ### Added
+- `TYPE` / `DBSIZE` / `FLUSHDB` / `FLUSHALL` keyspace commands (`TYPE` reports `string`/`zset`/`none`).
 - `INCR` / `DECR` / `INCRBY` / `DECRBY` integer counters: a missing key starts at 0, the value
   round-trips as a decimal string through `GET`/`SET`, and overflow / non-integer / WRONGTYPE are
   rejected without changing the stored value.

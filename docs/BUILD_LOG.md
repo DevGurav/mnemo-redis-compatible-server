@@ -2,6 +2,28 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 (cont.) — Keyspace commands (TYPE/DBSIZE/FLUSH)
+
+Added the keyspace introspection/admin surface: `TYPE`, `DBSIZE`, `FLUSHDB`, `FLUSHALL`.
+
+**Context.** With strings and sorted sets both in the keyspace, clients (and `redis-cli` sessions)
+need to ask what a key holds and how big the keyspace is. These are thin commands over the typed `Db`
+built last session — no new structures.
+
+**What was implemented.** `TYPE key` returns `string`/`zset`/`none` via the existing `isString`/
+`isZSet` guards (a natural validation of the typed keyspace). `DBSIZE` returns `Db.size()` (keys across
+all types). `FLUSHDB`/`FLUSHALL` call `Db.flush()`; they're identical today on a single-node, one-DB
+server but kept distinct for client compatibility. New `command/keyspace/` package.
+
+**Results.** `./gradlew test` → **33 green** (added 6 in `KeyspaceCommandsTest`: type per value kind,
+type after a SET overwrite, DBSIZE across types and after DEL, FLUSHDB/FLUSHALL emptying, arity).
+`specTest` → 60 green (unchanged).
+
+**What's next.** The bigger items toward the `redis-benchmark` milestone: Hashes (reusing `Dict` for
+field storage — needs an iteration method on `Dict` for `HGETALL`), Lists, `INFO`; and differential
+tests vs. a real `redis-server`. There's also the standing flagship gap: make `DictBenchmark` drive an
+active rehash to produce the p99 before/after number. See [roadmap](roadmap.md).
+
 ## Week 2 (cont.) — Integer counters (INCR/DECR)
 
 Added the `INCR` / `DECR` / `INCRBY` / `DECRBY` family — the next command surface toward the
