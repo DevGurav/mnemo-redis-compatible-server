@@ -26,3 +26,4 @@ settled question.
 | [0006](0006-logical-maxmemory.md) | `maxmemory` as logical capacity, not physical heap weighing | Accepted (impl scheduled W3) |
 | [0007](0007-typed-keyspace.md) | Separate sorted-set namespace, WRONGTYPE-guarded (unified typed keyspace deferred) | Accepted |
 | [0008](0008-hash-type.md) | Hash type as a third namespace reusing `Dict`; keyspace unification deferred to W3–W4 | Accepted |
+| [0009](0009-list-type-and-info.md) | List type as a fourth namespace with a `ListNode` pool, plus the `INFO` endpoint; unification deferred to the W4 sharding rework | Accepted |

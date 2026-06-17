@@ -2,6 +2,50 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 (close) — Lists (LPUSH/RPUSH/LPOP/RPOP/LLEN/LRANGE) + the `INFO` endpoint
+
+Added the fourth and final Week-2 value type and the observability surface, closing out W2.
+
+**Context.** Lists are the one W2 type that is a genuinely new structure rather than a reuse of
+`Dict` — and the natural place to apply the `DictEntryPool` pattern a second time. `INFO` is the
+introspection surface [observability.md](observability.md) and [api-protocol.md](api-protocol.md) §5
+promised but hadn't been wired.
+
+**What was built.**
+
+- **`IntrusiveList`** — a hand-built doubly-linked list with head/tail pointers: O(1)
+  `lpush`/`rpush`/`lpop`/`rpop`, and `lrange` that walks from the nearer end.
+- **`ListNodePool`** — the structural twin of `DictEntryPool`: an intrusive free list threaded
+  through each node's `next`, nulling `value`/`prev`/`next` on release *before* the capacity check.
+  Push acquires a shell, pop releases one, so a steady-depth queue allocates nothing in the hot path
+  (the zero-allocation thesis, [ADR 0003](decisions/0003-separate-chaining-with-entry-pool.md)).
+- **A fourth keyspace namespace** in `Db` (`key → IntrusiveList`). One-type-per-key is preserved by
+  extending the `WRONGTYPE` guards a fourth way — every string/sorted-set/hash command now also checks
+  `isList`, the list commands check the other three, and `TYPE` reports `list`.
+- **`LPUSH`/`RPUSH`** (return new length, multi-value), **`LPOP`/`RPOP`** (drop an emptied list, per
+  Redis), **`LLEN`**, **`LRANGE`** (Redis negative/clamped index semantics).
+- **`INFO [section]`** — a Redis-compatible bulk string over four sections: Server (version/JDK/GC/
+  uptime), Clients (a live connected-channel count), Memory (`maxmemory:0` + real `used_memory`),
+  Keyspace (per-type key counts). Backed by a single `ServerStats` shared between the registry and a
+  `@Sharable` connection-counter handler in the Netty pipeline; the counter is atomic because connect/
+  disconnect run on worker threads while `INFO` reads on the shard thread.
+
+**Verification.** `ListCommandsTest` drives every command through the real registry — ordering, the
+four-way `WRONGTYPE` guards both directions, empty-key deletion, `LRANGE` index edges — and asserts
+the GC thesis directly on `IntrusiveList`: popped nodes return to the pool and a later push reuses one.
+`InfoCommandTest` checks each section, section filtering, and that Clients/Keyspace track live state.
+`./gradlew test` → **73 green** (+24); `specTest` → 60 (unchanged — the new tests are plumbing, not
+spec).
+
+**Decision recorded.** Lists landed as a fourth parallel namespace, holding the keyspace unification
+[ADR 0008] foresaw at this exact point; it's now pinned to the W4 sharding rework where a type-tagged
+keyspace `Dict` and a centralized `typeOf` collapse the now four-way guards. `INFO` deliberately omits
+the logical payload-byte counter, which is the W3 eviction work
+([ADR 0009](decisions/0009-list-type-and-info.md)).
+
+**What's next.** Week 3 — TTL/expiry and the logical-`maxmemory` eviction counter (LRU/LFU); then
+differential tests vs. a real `redis-server`. See [roadmap](roadmap.md).
+
 ## Week 2 (cont.) — Hashes (HSET/HGET/HGETALL/HDEL/HLEN) + the Dict iterator
 
 Added the third value type, and the dual-table iterator it required.
