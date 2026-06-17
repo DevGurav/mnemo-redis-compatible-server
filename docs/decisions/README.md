@@ -25,3 +25,4 @@ settled question.
 | [0005](0005-skiplist-over-treemap.md) | Span-augmented skip list for the sorted set (not `TreeMap`) | Accepted |
 | [0006](0006-logical-maxmemory.md) | `maxmemory` as logical capacity, not physical heap weighing | Accepted (impl scheduled W3) |
 | [0007](0007-typed-keyspace.md) | Separate sorted-set namespace, WRONGTYPE-guarded (unified typed keyspace deferred) | Accepted |
+| [0008](0008-hash-type.md) | Hash type as a third namespace reusing `Dict`; keyspace unification deferred to W3–W4 | Accepted |

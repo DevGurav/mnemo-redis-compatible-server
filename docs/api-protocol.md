@@ -218,6 +218,21 @@ On any error the stored value is left unchanged.
 
 ---
 
+## 2e. Hash commands (Week 2)
+
+A hash maps fields to values (stored internally as a `Dict` per key). A hash command on a string or
+sorted-set key returns `-WRONGTYPE`; `SET` overwrites; `DEL`/`EXISTS`/`TYPE` (→ `hash`) span it.
+
+| Command | Reply | Notes |
+| --- | --- | --- |
+| `HSET key field value [field value ...]` | integer | Number of **newly added** fields (updates not counted). Creates the hash if absent. |
+| `HGET key field` | bulk / null | The value, or null bulk if the field or key is absent. |
+| `HGETALL key` | array | Flat array of alternating field, value bulk strings; empty array if absent. |
+| `HDEL key field [field ...]` | integer | Number of fields removed; removing the last field deletes the key. |
+| `HLEN key` | integer | Field count, or 0 if absent. |
+
+---
+
 ## 3. Error conventions
 
 All error replies use the format `-<PREFIX> <human-readable message>\r\n`. Clients that

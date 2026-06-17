@@ -26,7 +26,7 @@ final class NumericString {
      *         overflow)
      */
     static RespValue apply(CommandContext ctx, String key, long operand, boolean subtract) {
-        if (ctx.db().isZSet(key)) {
+        if (ctx.db().isZSet(key) || ctx.db().isHash(key)) {
             return RespValue.error(WRONGTYPE);
         }
 

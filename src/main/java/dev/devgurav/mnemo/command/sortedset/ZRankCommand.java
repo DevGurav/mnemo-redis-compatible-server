@@ -17,7 +17,7 @@ public final class ZRankCommand implements Command {
         }
 
         String key = ctx.argString(1);
-        if (ctx.db().isString(key)) {
+        if (ctx.db().isString(key) || ctx.db().isHash(key)) {
             return RespValue.error(SortedSetReplies.WRONGTYPE);
         }
 

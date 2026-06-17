@@ -17,6 +17,7 @@ public final class TypeCommand implements Command {
         String key = ctx.argString(1);
         String type = ctx.db().isString(key) ? "string"
                     : ctx.db().isZSet(key)   ? "zset"
+                    : ctx.db().isHash(key)   ? "hash"
                     : "none";
         return new RespValue.SimpleString(type);
     }

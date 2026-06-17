@@ -12,7 +12,7 @@ public final class GetCommand implements Command {
             return RespValue.error("ERR wrong number of arguments for 'get' command");
         }
         String key = ctx.argString(1);
-        if (ctx.db().isZSet(key)) {
+        if (ctx.db().isZSet(key) || ctx.db().isHash(key)) {
             return RespValue.error("WRONGTYPE Operation against a key holding the wrong kind of value");
         }
         byte[] value = ctx.db().get(key);
