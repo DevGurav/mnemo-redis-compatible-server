@@ -2,9 +2,11 @@ package dev.devgurav.mnemo.store;
 
 import dev.devgurav.mnemo.store.entry.DictEntry;
 import dev.devgurav.mnemo.store.entry.DictEntryPool;
+import dev.devgurav.mnemo.store.mem.SizeWeigher;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
 /**
@@ -51,6 +53,22 @@ public final class Dict implements KeyValueStore {
 
     /** Node allocator — acquire on insert, release on remove/clear. */
     private final DictEntryPool pool;
+
+    /**
+     * Running logical size in bytes (sum of {@code key + value + overhead} over all live entries),
+     * maintained on every insert/overwrite/remove so {@code maxmemory} and {@code INFO} read it in
+     * O(1). Atomic to satisfy the cross-thread contract on {@link #usedMemory()}, though the keyspace
+     * itself is mutated only on the single command thread.
+     */
+    private final AtomicLong usedMemory = new AtomicLong();
+
+    /**
+     * Logical access clock for approximate LRU: a monotonically increasing counter stamped onto an
+     * entry's {@link DictEntry#lruTime} on every read and write. Using a counter rather than a
+     * wall-clock keeps the per-access cost to a single increment (no {@code currentTimeMillis}
+     * syscall) while still ordering entries by recency.
+     */
+    private long lruClock;
 
     public Dict() {
         this(INITIAL_CAPACITY);
@@ -111,6 +129,12 @@ public final class Dict implements KeyValueStore {
         ht[1]     = null;
         rehashidx = -1;
         size      = 0;
+        usedMemory.set(0);
+    }
+
+    @Override
+    public long usedMemory() {
+        return usedMemory.get();
     }
 
     // -------------------------------------------------------------------------
@@ -136,7 +160,7 @@ public final class Dict implements KeyValueStore {
         // Search ht[0] for an existing entry to overwrite.
         for (DictEntry e = ht[0][idx0]; e != null; e = e.next) {
             if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
-                e.value = value;
+                overwrite(e, value);
                 return;
             }
         }
@@ -147,23 +171,36 @@ public final class Dict implements KeyValueStore {
             // Search ht[1] for an existing entry to overwrite (may have been migrated already).
             for (DictEntry e = ht[1][idx1]; e != null; e = e.next) {
                 if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
-                    e.value = value;
+                    overwrite(e, value);
                     return;
                 }
             }
 
             // New key during rehash: always insert into ht[1] so the entry survives promotion.
             ht[1][idx1] = pool.acquire(hash, keyBytes, value, ht[1][idx1]);
+            ht[1][idx1].lruTime = ++lruClock;
         } else {
             ht[0][idx0] = pool.acquire(hash, keyBytes, value, ht[0][idx0]);
+            ht[0][idx0].lruTime = ++lruClock;
         }
 
+        usedMemory.addAndGet(SizeWeigher.weigh(keyBytes, value)); // new mapping: charge full weight
         size++;
 
         // Only trigger a new rehash when no rehash is already in progress.
         if (!isRehashing() && size > LOAD_FACTOR * ht[0].length) {
             startRehash();
         }
+    }
+
+    /**
+     * Overwrite an existing entry's value in place: adjust {@link #usedMemory} by the value-length
+     * delta only (the key is unchanged) and refresh the LRU stamp, since an overwrite is an access.
+     */
+    private void overwrite(DictEntry e, byte[] value) {
+        usedMemory.addAndGet((long) value.length - e.value.length);
+        e.value   = value;
+        e.lruTime = ++lruClock;
     }
 
     /**
@@ -176,6 +213,7 @@ public final class Dict implements KeyValueStore {
         int idx0 = (hash & 0x7FFF_FFFF) & (ht[0].length - 1);
         for (DictEntry e = ht[0][idx0]; e != null; e = e.next) {
             if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
+                e.lruTime = ++lruClock; // a read counts as an access for LRU
                 return e.value;
             }
         }
@@ -184,6 +222,7 @@ public final class Dict implements KeyValueStore {
             int idx1 = (hash & 0x7FFF_FFFF) & (ht[1].length - 1);
             for (DictEntry e = ht[1][idx1]; e != null; e = e.next) {
                 if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
+                    e.lruTime = ++lruClock; // a read counts as an access for LRU
                     return e.value;
                 }
             }
@@ -209,6 +248,7 @@ public final class Dict implements KeyValueStore {
             if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
                 if (prev == null) ht[0][idx0] = e.next;
                 else              prev.next    = e.next;
+                usedMemory.addAndGet(-SizeWeigher.weigh(e.key, e.value)); // before release nulls them
                 pool.release(e);
                 size--;
                 return true;
@@ -223,6 +263,7 @@ public final class Dict implements KeyValueStore {
                 if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
                     if (prev == null) ht[1][idx1] = e.next;
                     else              prev.next    = e.next;
+                    usedMemory.addAndGet(-SizeWeigher.weigh(e.key, e.value)); // before release nulls them
                     pool.release(e);
                     size--;
                     return true;
@@ -343,6 +384,50 @@ public final class Dict implements KeyValueStore {
                 action.accept(e.key, e.value);
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Eviction primitives (used by the random-sampling LRU evictor)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Return one live entry sampled from the bucket arrays, or {@code null} if the table is empty.
+     * <b>Allocation-free</b>: no objects, iterators, or boxing — the evictor calls this {@code N}
+     * times per eviction and must not generate garbage on the command path.
+     *
+     * <p>{@code probe} is a caller-supplied random int. It is reduced over the combined slot space of
+     * {@code ht[0]} and (while rehashing) {@code ht[1]}, so the sample is drawn uniformly across both
+     * tables mid-resize. From the chosen slot we linear-probe forward (wrapping) to the next
+     * non-empty bucket and return its head node — already-drained {@code ht[0]} buckets below
+     * {@code rehashidx} are simply skipped as the {@code null}s they are.
+     *
+     * @param probe a random int (its sign is ignored); successive calls should pass fresh values
+     * @return a live {@link DictEntry}, or {@code null} when the dict holds no entries
+     */
+    public DictEntry randomEntry(int probe) {
+        if (size == 0) return null;
+        int len0  = ht[0].length;
+        int len1  = isRehashing() ? ht[1].length : 0;
+        int total = len0 + len1;
+
+        int start = (probe & 0x7FFF_FFFF) % total;
+        for (int n = 0; n < total; n++) {
+            int idx = start + n;
+            if (idx >= total) idx -= total; // wrap
+            DictEntry head = idx < len0 ? ht[0][idx] : ht[1][idx - len0];
+            if (head != null) return head;
+        }
+        return null; // unreachable while size > 0, but keeps the method total
+    }
+
+    /**
+     * Remove the mapping for {@code keyBytes} given its precomputed {@code hash}, returning whether
+     * one was removed. The byte-level twin of {@link #remove(String)}, exposed so the evictor can
+     * delete a sampled victim without rebuilding a {@code String} key (which would allocate). Updates
+     * {@link #usedMemory} and {@code size} exactly as a normal remove does.
+     */
+    public boolean removeByteKey(byte[] keyBytes, int hash) {
+        return removeBytes(keyBytes, hash);
     }
 
     // -------------------------------------------------------------------------

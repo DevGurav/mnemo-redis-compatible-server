@@ -20,5 +20,13 @@ public interface KeyValueStore {
 
     int size();
 
+    /**
+     * The running logical size of this keyspace in bytes — the sum over every live mapping of
+     * {@code key + value + per-entry overhead} ({@link dev.devgurav.mnemo.store.mem.SizeWeigher}).
+     * Maintained incrementally on put/remove/clear so the read is O(1); it backs the {@code maxmemory}
+     * bound and {@code INFO}'s {@code used_memory}.
+     */
+    long usedMemory();
+
     void clear();
 }

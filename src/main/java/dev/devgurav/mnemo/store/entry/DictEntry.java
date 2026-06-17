@@ -29,6 +29,15 @@ public final class DictEntry {
      */
     public DictEntry next;
 
+    /**
+     * Recency stamp for the approximate-LRU evictor: the value of the owning {@link
+     * dev.devgurav.mnemo.store.Dict}'s logical access clock at this entry's last read or write.
+     * A larger value means more recently used; the evictor evicts the smallest it samples. A logical
+     * clock (a monotonically incremented counter) is used rather than wall-clock time so updating it
+     * on every access costs an increment, not a {@code System.currentTimeMillis()} syscall.
+     */
+    public long lruTime;
+
     /** Pool-allocated nodes are constructed once by {@link DictEntryPool}; callers use acquire(). */
     public DictEntry() {}
 
@@ -38,4 +47,5 @@ public final class DictEntry {
     public byte[] value()   { return value; }
     public DictEntry next() { return next; }
     public int hash()       { return hash; }
+    public long lruTime()   { return lruTime; }
 }
