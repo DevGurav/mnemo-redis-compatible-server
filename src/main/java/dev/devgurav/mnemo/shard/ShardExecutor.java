@@ -4,6 +4,7 @@ import dev.devgurav.mnemo.command.CommandRegistry;
 import dev.devgurav.mnemo.net.ParsedCommand;
 import dev.devgurav.mnemo.net.resp.RespValue;
 import dev.devgurav.mnemo.store.Db;
+import dev.devgurav.mnemo.store.evict.Evictor;
 import org.jctools.queues.MpscArrayQueue;
 
 import java.util.Arrays;
@@ -39,14 +40,20 @@ public final class ShardExecutor {
     private final MpscArrayQueue<ParsedCommand> queue;
     private final CommandRegistry registry;
     private final Db db;
+    private final Evictor evictor; // null when maxmemory is unset or the store is not evictable
     private final Thread thread;
 
     private volatile boolean running;
 
     public ShardExecutor(int id, CommandRegistry registry, Db db) {
+        this(id, registry, db, null);
+    }
+
+    public ShardExecutor(int id, CommandRegistry registry, Db db, Evictor evictor) {
         this.queue    = new MpscArrayQueue<>(QUEUE_CAPACITY);
         this.registry = registry;
         this.db       = db;
+        this.evictor  = evictor;
         this.thread   = new Thread(this::loop, "mnemo-shard-" + id);
         this.thread.setDaemon(true);
     }
@@ -107,6 +114,9 @@ public final class ShardExecutor {
         List<byte[]> argList = Arrays.asList(cmd.args());
         RespValue reply;
         try {
+            // Enforce the maxmemory bound before the command runs, so a write never grows the
+            // keyspace past the budget without first reclaiming room (Redis pre-command eviction).
+            if (evictor != null) evictor.evictIfNeeded();
             reply = registry.dispatch(db, argList);
         } catch (RuntimeException e) {
             reply = RespValue.error("ERR " + e.getMessage());
