@@ -5,6 +5,7 @@ import dev.devgurav.mnemo.store.entry.DictEntryPool;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.function.BiConsumer;
 
 /**
  * Dict — a separate-chaining hash table with incremental rehashing and a pooled node allocator.
@@ -306,6 +307,42 @@ public final class Dict implements KeyValueStore {
     /** {@code true} while an incremental rehash is in progress. */
     boolean isRehashing() {
         return rehashidx != -1;
+    }
+
+    // -------------------------------------------------------------------------
+    // Iteration
+    // -------------------------------------------------------------------------
+
+    /**
+     * Visit every live key–value mapping exactly once, passing the raw key and value bytes to
+     * {@code action}.
+     *
+     * <h3>Dual-table correctness</h3>
+     * <p>An entry lives in exactly one table at any moment: a rehash <em>moves</em> nodes from
+     * {@code ht[0]} to {@code ht[1]} (never copies), and new keys inserted mid-rehash go straight
+     * into {@code ht[1]}. So iterating all of {@code ht[0]} and — while a rehash is active — all of
+     * {@code ht[1]} yields each entry once and none twice. The {@code ht[0]} buckets below
+     * {@code rehashidx} are already drained to {@code null} by {@link #rehashStep}, so they are
+     * skipped naturally; this is why a primed-then-mid-rehash table still enumerates completely.
+     *
+     * <h3>Concurrency</h3>
+     * <p>Read-only and single-threaded (the keyspace is owned by one command thread), so there is no
+     * concurrent-modification hazard. {@code action} must not mutate this {@code Dict}.
+     */
+    public void forEach(BiConsumer<byte[], byte[]> action) {
+        forEachTable(ht[0], action);
+        if (isRehashing()) {
+            forEachTable(ht[1], action);
+        }
+    }
+
+    private static void forEachTable(DictEntry[] table, BiConsumer<byte[], byte[]> action) {
+        if (table == null) return;
+        for (DictEntry head : table) {
+            for (DictEntry e = head; e != null; e = e.next) {
+                action.accept(e.key, e.value);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
