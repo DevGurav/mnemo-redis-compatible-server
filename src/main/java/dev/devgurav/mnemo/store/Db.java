@@ -37,6 +37,9 @@ public final class Db {
     private final Map<String, Dict> hashes = new HashMap<>();
     private final Map<String, IntrusiveList> lists = new HashMap<>();
 
+    /** Cumulative count of keys removed by the evictor; surfaced via {@code INFO}. Single-thread owned. */
+    private long evictedKeys;
+
     public Db(KeyValueStore store) {
         this.store = store;
     }
@@ -128,4 +131,21 @@ public final class Db {
     public int hashCount() { return hashes.size(); }
 
     public int listCount() { return lists.size(); }
+
+    // --- Memory accounting (for maxmemory / INFO) ---
+
+    /**
+     * The running logical size in bytes of the evictable (string) keyspace — maintained by the
+     * backing {@link KeyValueStore} on every put/remove, so the read is O(1). This is the figure the
+     * {@code maxmemory} bound and {@code INFO}'s {@code used_memory} are measured against. Sorted
+     * sets, hashes, and lists are not weighed here: the random-sampling LRU evictor frees only string
+     * keys, so the bound it enforces is defined over exactly what it can reclaim.
+     */
+    public long usedMemory() { return store.usedMemory(); }
+
+    /** Cumulative number of keys removed by the evictor since startup (an {@code INFO} stat). */
+    public long evictedKeys() { return evictedKeys; }
+
+    /** Called by the evictor after it deletes a sampled victim, to advance the {@code INFO} stat. */
+    public void recordEviction() { evictedKeys++; }
 }
