@@ -9,8 +9,15 @@ import dev.devgurav.mnemo.command.keyspace.DbSizeCommand;
 import dev.devgurav.mnemo.command.keyspace.FlushAllCommand;
 import dev.devgurav.mnemo.command.keyspace.FlushDbCommand;
 import dev.devgurav.mnemo.command.keyspace.TypeCommand;
+import dev.devgurav.mnemo.command.list.LLenCommand;
+import dev.devgurav.mnemo.command.list.LPopCommand;
+import dev.devgurav.mnemo.command.list.LPushCommand;
+import dev.devgurav.mnemo.command.list.LRangeCommand;
+import dev.devgurav.mnemo.command.list.RPopCommand;
+import dev.devgurav.mnemo.command.list.RPushCommand;
 import dev.devgurav.mnemo.command.server.CommandCommand;
 import dev.devgurav.mnemo.command.server.EchoCommand;
+import dev.devgurav.mnemo.command.server.InfoCommand;
 import dev.devgurav.mnemo.command.server.PingCommand;
 import dev.devgurav.mnemo.command.sortedset.ZAddCommand;
 import dev.devgurav.mnemo.command.sortedset.ZRangeCommand;
@@ -24,6 +31,7 @@ import dev.devgurav.mnemo.command.strings.IncrByCommand;
 import dev.devgurav.mnemo.command.strings.IncrCommand;
 import dev.devgurav.mnemo.command.strings.SetCommand;
 import dev.devgurav.mnemo.net.resp.RespValue;
+import dev.devgurav.mnemo.server.ServerStats;
 import dev.devgurav.mnemo.store.Db;
 
 import java.nio.charset.StandardCharsets;
@@ -53,12 +61,24 @@ public final class CommandRegistry {
         return command.execute(new CommandContext(db, args));
     }
 
-    /** The default command set for week 1. */
+    /**
+     * The default command set, with a fresh {@link ServerStats} backing {@code INFO}. Convenient for
+     * tests and any caller that doesn't share the server's live connection counter.
+     */
     public static CommandRegistry standard() {
+        return standard(new ServerStats());
+    }
+
+    /**
+     * The default command set, with {@code INFO} backed by the supplied {@link ServerStats} so it
+     * reports the same uptime and live connection count the server tracks.
+     */
+    public static CommandRegistry standard(ServerStats stats) {
         CommandRegistry r = new CommandRegistry();
         r.register("PING", new PingCommand());
         r.register("ECHO", new EchoCommand());
         r.register("COMMAND", new CommandCommand());
+        r.register("INFO", new InfoCommand(stats));
         r.register("SET", new SetCommand());
         r.register("GET", new GetCommand());
         r.register("DEL", new DelCommand());
@@ -75,6 +95,12 @@ public final class CommandRegistry {
         r.register("HGETALL", new HGetAllCommand());
         r.register("HDEL", new HDelCommand());
         r.register("HLEN", new HLenCommand());
+        r.register("LPUSH", new LPushCommand());
+        r.register("RPUSH", new RPushCommand());
+        r.register("LPOP", new LPopCommand());
+        r.register("RPOP", new RPopCommand());
+        r.register("LLEN", new LLenCommand());
+        r.register("LRANGE", new LRangeCommand());
         r.register("TYPE", new TypeCommand());
         r.register("DBSIZE", new DbSizeCommand());
         r.register("FLUSHDB", new FlushDbCommand());

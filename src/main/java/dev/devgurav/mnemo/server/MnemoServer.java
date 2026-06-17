@@ -46,7 +46,8 @@ public final class MnemoServer implements AutoCloseable {
     public int start() throws InterruptedException {
         KeyValueStore store = config.useDict() ? new Dict() : new HashMapStore();
         Db db = new Db(store);
-        CommandRegistry registry = CommandRegistry.standard();
+        ServerStats stats = new ServerStats();
+        CommandRegistry registry = CommandRegistry.standard(stats);
 
         shard = new ShardExecutor(0, registry, db);
         shard.start();
@@ -57,7 +58,7 @@ public final class MnemoServer implements AutoCloseable {
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
                  .channel(NioServerSocketChannel.class)
-                 .childHandler(new MnemoChannelInitializer(shard));
+                 .childHandler(new MnemoChannelInitializer(shard, stats));
 
         serverChannel = bootstrap.bind(config.port()).sync().channel();
         return ((InetSocketAddress) serverChannel.localAddress()).getPort();

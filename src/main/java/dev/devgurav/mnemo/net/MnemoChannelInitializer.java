@@ -2,6 +2,7 @@ package dev.devgurav.mnemo.net;
 
 import dev.devgurav.mnemo.net.resp.RespDecoder;
 import dev.devgurav.mnemo.net.resp.RespEncoder;
+import dev.devgurav.mnemo.server.ServerStats;
 import dev.devgurav.mnemo.shard.ShardExecutor;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
@@ -19,20 +20,26 @@ import io.netty.channel.socket.SocketChannel;
  *   <li>{@link CommandInboundHandler} — enqueues the {@code ParsedCommand} onto the shard's
  *       {@code MpscArrayQueue} for execution on the shard thread.</li>
  * </ol>
+ *
+ * <p>A shared {@link ConnectionCounterHandler} sits at the head so {@code INFO}'s
+ * {@code connected_clients} stays accurate as connections come and go.
  */
 public final class MnemoChannelInitializer extends ChannelInitializer<SocketChannel> {
 
     private final ShardExecutor shard;
+    private final ConnectionCounterHandler connectionCounter;
 
-    public MnemoChannelInitializer(ShardExecutor shard) {
+    public MnemoChannelInitializer(ShardExecutor shard, ServerStats stats) {
         this.shard = shard;
+        this.connectionCounter = new ConnectionCounterHandler(stats);
     }
 
     @Override
     protected void initChannel(SocketChannel ch) {
         ch.pipeline()
-          .addLast("resp-decoder", new RespDecoder())
-          .addLast("resp-encoder", new RespEncoder())
-          .addLast("command",      new CommandInboundHandler(shard));
+          .addLast("conn-counter",  connectionCounter)
+          .addLast("resp-decoder",  new RespDecoder())
+          .addLast("resp-encoder",  new RespEncoder())
+          .addLast("command",       new CommandInboundHandler(shard));
     }
 }
