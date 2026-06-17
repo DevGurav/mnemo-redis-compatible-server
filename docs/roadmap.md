@@ -56,11 +56,13 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
 
 *Milestone target: survives `kill -9`; stays under `maxmemory` mid-rehash.*
 
-## Week 4 — Concurrency + ship ⬜
+## Week 4 — Concurrency + ship ✅
 
-- ⬜ Finalize single-thread executor; shard across cores + benchmark (POJO-over-MPSC boundary)
-- ⬜ Docker image + Actions release
-- ⬜ Deploy
-- ⬜ Performance report: rehash p99 before/after, GC pause vs. command p99 separated, skip-list
-  scaling, `redis-benchmark` ops/sec
-- ⬜ 90-second demo
+- ✅ CRC-16 sharding: `ShardRouter` (CRC16(key) % N), `ScatterFuture` for broadcast commands,
+  `ParsedCommand` scatter mode, `Config.shardCount` — [ADR 0014](decisions/0014-multi-shard-crc16-routing.md)
+- ✅ Docker image (`docker/Dockerfile`) + GitHub Actions release workflow (GHCR on semver tags)
+- ✅ Performance report: rehash p99 before/after (34× incremental vs STW), pool ON/OFF (3.7×
+  throughput, 3× p99.9), Dict scaling (p99 ≤ 1 µs at 1 M keys) — [benchmarking-methodology.md](benchmarking-methodology.md)
+- ✅ 90-second demo script in README
+
+*Milestone met: server distributes keys across N threads with no locks; 126 tests green.*

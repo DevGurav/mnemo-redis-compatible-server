@@ -155,6 +155,11 @@ public final class ShardExecutor {
                 aof.append(argList);
             }
         }
-        cmd.ctx().channel().writeAndFlush(reply);
+        // Reply: scatter (fan-out) commands contribute to the future; others write directly.
+        if (cmd.isScattered()) {
+            cmd.scatter().contribute(cmd.shardIndex(), reply);
+        } else {
+            cmd.ctx().channel().writeAndFlush(reply);
+        }
     }
 }

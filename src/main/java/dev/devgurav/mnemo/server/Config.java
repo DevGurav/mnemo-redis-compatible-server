@@ -12,25 +12,31 @@ import dev.devgurav.mnemo.store.evict.EvictionPolicy;
  * <p>{@code maxmemory=0} disables eviction. {@code aofPath=null} disables AOF persistence.
  */
 public record Config(int port, boolean useDict, long maxmemory, EvictionPolicy evictionPolicy,
-                     String aofPath) {
+                     String aofPath, int shardCount) {
 
-    /** Back-compat: no AOF. */
+    /** Back-compat: single shard, no AOF. */
     public Config(int port, boolean useDict, long maxmemory, EvictionPolicy evictionPolicy) {
-        this(port, useDict, maxmemory, evictionPolicy, null);
+        this(port, useDict, maxmemory, evictionPolicy, null, 1);
     }
 
-    /** Back-compat: no AOF, default LRU policy. */
+    /** Back-compat: single shard, no AOF, given aofPath. */
+    public Config(int port, boolean useDict, long maxmemory, EvictionPolicy evictionPolicy,
+                  String aofPath) {
+        this(port, useDict, maxmemory, evictionPolicy, aofPath, 1);
+    }
+
+    /** Back-compat: no AOF, default LRU policy, single shard. */
     public Config(int port, boolean useDict, long maxmemory) {
-        this(port, useDict, maxmemory, EvictionPolicy.ALLKEYS_LRU, null);
+        this(port, useDict, maxmemory, EvictionPolicy.ALLKEYS_LRU, null, 1);
     }
 
-    /** Back-compat: unlimited memory, no eviction, no AOF. */
+    /** Back-compat: unlimited memory, no eviction, no AOF, single shard. */
     public Config(int port, boolean useDict) {
-        this(port, useDict, 0, EvictionPolicy.NOEVICTION, null);
+        this(port, useDict, 0, EvictionPolicy.NOEVICTION, null, 1);
     }
 
     public static Config defaults() {
-        return new Config(6379, false, 0, EvictionPolicy.NOEVICTION, null);
+        return new Config(6379, false, 0, EvictionPolicy.NOEVICTION, null, 1);
     }
 
     public static Config fromArgs(String[] args) {
@@ -41,6 +47,7 @@ public record Config(int port, boolean useDict, long maxmemory, EvictionPolicy e
         EvictionPolicy evictionPolicy = EvictionPolicy.fromString(
                 System.getenv().getOrDefault("MNEMO_EVICTION_POLICY", "allkeys-lru"));
         String aofPath = System.getenv("MNEMO_AOF_PATH");
+        int shardCount = envInt("MNEMO_SHARDS", 1);
         for (int i = 0; i + 1 < args.length; i++) {
             switch (args[i]) {
                 case "--port"             -> port = Integer.parseInt(args[i + 1]);
@@ -48,10 +55,11 @@ public record Config(int port, boolean useDict, long maxmemory, EvictionPolicy e
                 case "--maxmemory"        -> maxmemory = Long.parseLong(args[i + 1]);
                 case "--eviction-policy"  -> evictionPolicy = EvictionPolicy.fromString(args[i + 1]);
                 case "--aof-path"         -> aofPath = args[i + 1];
+                case "--shards"           -> shardCount = Integer.parseInt(args[i + 1]);
                 default -> { /* ignore */ }
             }
         }
-        return new Config(port, useDict, maxmemory, evictionPolicy, aofPath);
+        return new Config(port, useDict, maxmemory, evictionPolicy, aofPath, shardCount);
     }
 
     private static int envInt(String key, int def) {

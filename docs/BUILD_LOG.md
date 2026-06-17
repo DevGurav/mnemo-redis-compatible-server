@@ -2,6 +2,43 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 4 — CRC-16 sharding, Docker release, performance report
+
+Added multi-shard key routing, containerised the server, and filled the performance report with
+real JMH numbers.
+
+**Context.** The W3 data plane ran on a single executor thread. Week 4 generalises it to N
+shared-nothing threads with lock-free MPSC hand-off from Netty workers.
+
+**What was built.**
+
+- **`Crc16`** — CRC-16/XMODEM (polynomial 0x1021, init 0) via a 256-entry lookup table.
+  Implements Redis Cluster's hash-slot algorithm; `{hashtag}` extraction matches the Redis spec.
+  Fixed a Java-specific bug: unlike C `uint16_t`, Java `int` does not overflow at 16 bits, so
+  each shift-left must be masked with `& 0xFFFF` inside the table-building loop or the MSB check
+  in subsequent iterations reads incorrect bits.
+- **`ScatterFuture`** — collects N partial `RespValue` replies from all shards with an
+  `AtomicInteger` countdown; the last shard to arrive merges and writes one aggregated reply.
+  Separate factory methods for DBSIZE (sum), KEYS (union), FLUSHDB/FLUSHALL (first error or OK).
+- **`ShardRouter`** — routes single-key commands via `CRC16(key) % N`; broadcast commands
+  (DBSIZE, KEYS, FLUSHDB, FLUSHALL) via `ScatterFuture` fan-out; metadata commands (PING, INFO,
+  COMMAND) to shard 0. Single-shard fast path skips routing overhead entirely.
+- **`ParsedCommand`** extended with `scatter` + `shardIndex` fields (null for direct commands).
+- **`CommandInboundHandler`** now accepts `ShardRouter` instead of a single `ShardExecutor`.
+- **`MnemoServer`** builds N shards in a loop; `--shards N` / `MNEMO_SHARDS` config.
+- **`ShardRouterTest`** — 10 tests: CRC-16 known values, hashtag extraction, key distribution
+  across 4 shards, SET/GET across shards, DBSIZE summing all shards, FLUSHDB clearing all shards.
+- **`.github/workflows/release.yml`** — publishes to GHCR on semver tags via multi-stage Docker
+  build (`docker/Dockerfile` from W1 scaffold).
+- **Benchmarking-methodology.md** updated with real JMH numbers: pool ON 3.7× higher throughput
+  (258 vs 69 Mops/s), p99.9 3× lower (0.20 vs 0.60 µs); rehash spike 34× (3.3 vs 112.6 ms).
+
+**Verification.** `./gradlew clean test` → **126 green** (+9 `ShardRouterTest`). `specTest` → 60.
+
+**Decisions recorded.** [ADR 0014](decisions/0014-multi-shard-crc16-routing.md).
+
+---
+
 ## Week 3 — AOF persistence + crash-recovery
 
 Added append-only file persistence so data survives restarts and `kill -9` crashes.

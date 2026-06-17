@@ -3,7 +3,7 @@ package dev.devgurav.mnemo.net;
 import dev.devgurav.mnemo.net.resp.RespDecoder;
 import dev.devgurav.mnemo.net.resp.RespEncoder;
 import dev.devgurav.mnemo.server.ServerStats;
-import dev.devgurav.mnemo.shard.ShardExecutor;
+import dev.devgurav.mnemo.shard.ShardRouter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 
@@ -12,25 +12,21 @@ import io.netty.channel.socket.SocketChannel;
  *
  * <p>Pipeline stages in order:
  * <ol>
- *   <li>{@link RespDecoder} — copies RESP2 bytes into a {@link ParsedCommand} POJO, consuming
- *       no {@code ByteBuf} references past the handler boundary.</li>
+ *   <li>{@link ConnectionCounterHandler} — tracks live connections for {@code INFO clients}.</li>
+ *   <li>{@link RespDecoder} — copies RESP2 bytes into a {@link ParsedCommand} POJO.</li>
  *   <li>{@link RespEncoder} — serialises a {@link dev.devgurav.mnemo.net.resp.RespValue} reply
- *       POJO into RESP2 wire bytes; allocates a pooled {@code ByteBuf} that Netty releases after
- *       the write completes.</li>
- *   <li>{@link CommandInboundHandler} — enqueues the {@code ParsedCommand} onto the shard's
- *       {@code MpscArrayQueue} for execution on the shard thread.</li>
+ *       POJO into RESP2 wire bytes.</li>
+ *   <li>{@link CommandInboundHandler} — routes the {@code ParsedCommand} to the correct shard
+ *       (or fans it out for global commands) via {@link ShardRouter}.</li>
  * </ol>
- *
- * <p>A shared {@link ConnectionCounterHandler} sits at the head so {@code INFO}'s
- * {@code connected_clients} stays accurate as connections come and go.
  */
 public final class MnemoChannelInitializer extends ChannelInitializer<SocketChannel> {
 
-    private final ShardExecutor shard;
+    private final ShardRouter router;
     private final ConnectionCounterHandler connectionCounter;
 
-    public MnemoChannelInitializer(ShardExecutor shard, ServerStats stats) {
-        this.shard = shard;
+    public MnemoChannelInitializer(ShardRouter router, ServerStats stats) {
+        this.router = router;
         this.connectionCounter = new ConnectionCounterHandler(stats);
     }
 
@@ -40,6 +36,6 @@ public final class MnemoChannelInitializer extends ChannelInitializer<SocketChan
           .addLast("conn-counter",  connectionCounter)
           .addLast("resp-decoder",  new RespDecoder())
           .addLast("resp-encoder",  new RespEncoder())
-          .addLast("command",       new CommandInboundHandler(shard));
+          .addLast("command",       new CommandInboundHandler(router));
     }
 }
