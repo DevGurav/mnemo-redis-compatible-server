@@ -23,7 +23,8 @@ settled question.
 | [0003](0003-separate-chaining-with-entry-pool.md) | Separate chaining + `DictEntry` object pool (not open addressing) | Accepted |
 | [0004](0004-incremental-rehashing.md) | Dual-table incremental rehashing | Accepted |
 | [0005](0005-skiplist-over-treemap.md) | Span-augmented skip list for the sorted set (not `TreeMap`) | Accepted |
-| [0006](0006-logical-maxmemory.md) | `maxmemory` as logical capacity, not physical heap weighing | Accepted (impl scheduled W3) |
+| [0006](0006-logical-maxmemory.md) | `maxmemory` as logical capacity, not physical heap weighing | Accepted (implemented by 0010) |
 | [0007](0007-typed-keyspace.md) | Separate sorted-set namespace, WRONGTYPE-guarded (unified typed keyspace deferred) | Accepted |
 | [0008](0008-hash-type.md) | Hash type as a third namespace reusing `Dict`; keyspace unification deferred to W3–W4 | Accepted |
 | [0009](0009-list-type-and-info.md) | List type as a fourth namespace with a `ListNode` pool, plus the `INFO` endpoint; unification deferred to the W4 sharding rework | Accepted |
+| [0010](0010-random-sampling-lru-eviction.md) | Random-sampling approximate LRU eviction (allocation-free sampler) + logical access clock; implements 0006 | Accepted |

@@ -2,6 +2,53 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 3 — Memory bounding + approximate-LRU eviction
+
+Implemented the `maxmemory` bound [ADR 0006](decisions/0006-logical-maxmemory.md) promised, with a
+Redis-style random-sampling LRU evictor.
+
+**Context.** Until now the keyspace grew without limit — the headline reliability gap before any
+"survives under load" claim. [ADR 0006](decisions/0006-logical-maxmemory.md) had locked the *meaning*
+of `maxmemory` (a logical byte counter, not a heap weigh) but left it unimplemented. Three things had
+to land together: the counter, per-key recency tracking, and an evictor that honours the
+project's zero-allocation thesis on the command path.
+
+**What was built.**
+
+- **`SizeWeigher`** — the logical cost of a mapping: `key + value + ENTRY_OVERHEAD_BYTES`. The counter
+  lives in the store that holds the bytes (`Dict`/`HashMapStore` maintain `usedMemory()` on every
+  put/overwrite/remove, where the old value is already in hand — no extra lookup). `Db.usedMemory()`
+  exposes it. Keeping it in the store guarantees the weight added on insert is the exact weight
+  subtracted on eviction — no `String`↔`byte[]` drift.
+- **Logical access clock** — `DictEntry` gains a `long lruTime`, stamped from a per-`Dict`
+  monotonically-incremented counter on every read and write. One increment per access, no
+  `currentTimeMillis` syscall on the read path; the approximation lives in the sampling, not the clock.
+- **`Evictor`** — when `usedMemory > maxmemory`, draw `N=5` random entries straight from the `Dict`
+  bucket arrays (`Dict.randomEntry`), keep the smallest `lruTime`, delete it (`Dict.removeByteKey`, so
+  no `String` is rebuilt), repeat until under budget. The sampler is **100% allocation-free**: one
+  `DictEntry` reference + a `long` for the best candidate, an inlined xorshift for randomness, entries
+  read in place — no arrays, iterators, or boxing.
+- **Wiring** — `maxmemory` added to `Config` (env `MNEMO_MAXMEMORY` / `--maxmemory`, default 0 =
+  unlimited). The shard runs `evictor.evictIfNeeded()` *before* each command (Redis pre-command
+  eviction), armed only when `maxmemory > 0` and the store is a `Dict`. `INFO`'s Memory section now
+  reports the true logical `used_memory`, the configured `maxmemory`/policy, and cumulative
+  `evicted_keys`.
+
+**Verification.** `EvictorTest` proves the bound holds: it evicts down to budget, leaves an
+under-budget keyspace untouched, keeps `used_memory` exactly equal to the surviving keys' weight across
+evict/insert churn, spares a repeatedly-accessed "hot" key, and — the headline — drives **50k inserts
+through a 200-entry budget** and asserts the resident set stays ≤200 keys, i.e. memory is bounded and
+the server cannot OOM from keyspace growth. `./gradlew test` → **79 green** (+6); `specTest` → 60
+(unchanged — the `Dict` changes keep every existing spec green).
+
+**Decision recorded.** [ADR 0010](decisions/0010-random-sampling-lru-eviction.md) captures the
+algorithm (random-sampling approximate LRU), the logical clock over wall-time, the counter-in-the-store
+placement, and string-keyspace-only scope; it implements [ADR 0006](decisions/0006-logical-maxmemory.md).
+
+**What's next.** Week 3 continues — TTL (lazy + active expiry), then LFU policy and AOF persistence /
+crash-recovery. Week 2 has one tail item left: the `KEYS` command and differential tests vs. a real
+`redis-server`. See [roadmap](roadmap.md).
+
 ## Week 2 (close) — Lists (LPUSH/RPUSH/LPOP/RPOP/LLEN/LRANGE) + the `INFO` endpoint
 
 Added the fourth and final Week-2 value type and the observability surface, closing out W2.

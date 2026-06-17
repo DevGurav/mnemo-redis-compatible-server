@@ -30,15 +30,20 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
 - ✅ `TYPE` / `DBSIZE` / `FLUSHDB` / `FLUSHALL` keyspace commands
 - ✅ Hashes (`HSET`/`HGET`/`HGETALL`/`HDEL`/`HLEN`) on a per-key `Dict`, with a dual-table
   `Dict.forEach` iterator ([ADR 0008](decisions/0008-hash-type.md))
-- ⬜ Lists; `KEYS` `INFO`
+- ✅ Lists (`LPUSH`/`RPUSH`/`LPOP`/`RPOP`/`LLEN`/`LRANGE`) on an `IntrusiveList` with a `ListNode`
+  pool; `INFO` over Server/Clients/Memory/Keyspace ([ADR 0009](decisions/0009-list-type-and-info.md))
+- ⬜ `KEYS`
 - ⬜ Differential tests vs. a real Redis instance
 
 *Milestone target: first `redis-benchmark` numbers.*
 
-## Week 3 — Ops + hardening ⬜
+## Week 3 — Ops + hardening 🔶
 
 - ⬜ TTL (lazy + active expiry)
-- ⬜ LRU/LFU eviction + the logical-capacity protocol — [ADR 0006](decisions/0006-logical-maxmemory.md)
+- ✅ Approximate-LRU eviction + the logical-capacity protocol: allocation-free random sampler over the
+  `Dict`, logical access clock, `maxmemory` config, `used_memory`/`evicted_keys` in `INFO`
+  — [ADR 0006](decisions/0006-logical-maxmemory.md) / [ADR 0010](decisions/0010-random-sampling-lru-eviction.md)
+- ⬜ LFU eviction policy
 - ⬜ `DictEntry` object pool: async-profiler allocation comparison
 - ⬜ AOF persistence + crash-recovery test
 - ⬜ ZGC / JFR / Epsilon GC pass
