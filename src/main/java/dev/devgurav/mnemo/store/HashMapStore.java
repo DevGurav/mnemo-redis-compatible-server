@@ -5,6 +5,7 @@ import dev.devgurav.mnemo.store.mem.SizeWeigher;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * TEMPORARY placeholder keyspace backed by {@link java.util.HashMap}, so the server runs
@@ -43,6 +44,8 @@ public final class HashMapStore implements KeyValueStore {
     @Override public boolean containsKey(String key) { return map.containsKey(key); }
 
     @Override public int size() { return map.size(); }
+
+    @Override public void forEachKey(Consumer<String> action) { map.keySet().forEach(action); }
 
     @Override public long usedMemory() { return usedMemory.get(); }
 

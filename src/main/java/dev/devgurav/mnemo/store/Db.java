@@ -2,8 +2,12 @@ package dev.devgurav.mnemo.store;
 
 import dev.devgurav.mnemo.store.list.IntrusiveList;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * The single logical database (keyspace). A key holds exactly one type of value.
@@ -131,6 +135,23 @@ public final class Db {
     public int hashCount() { return hashes.size(); }
 
     public int listCount() { return lists.size(); }
+
+    // --- Keyspace scan ---
+
+    /**
+     * Returns all keys in all four namespaces that satisfy {@code filter}.
+     * Used by the {@code KEYS} command: the filter is a glob-pattern predicate built in the command
+     * layer so that {@code Db} stays decoupled from pattern-matching logic.
+     */
+    public List<String> keys(Predicate<String> filter) {
+        List<String> result = new ArrayList<>();
+        Consumer<String> collect = key -> { if (filter.test(key)) result.add(key); };
+        store.forEachKey(collect);
+        zsets.keySet().forEach(collect);
+        hashes.keySet().forEach(collect);
+        lists.keySet().forEach(collect);
+        return result;
+    }
 
     // --- Memory accounting (for maxmemory / INFO) ---
 

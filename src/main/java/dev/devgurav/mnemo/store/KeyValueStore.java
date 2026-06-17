@@ -1,5 +1,7 @@
 package dev.devgurav.mnemo.store;
 
+import java.util.function.Consumer;
+
 /**
  * The keyspace contract: a string-keyed, {@code byte[]}-valued map.
  *
@@ -19,6 +21,9 @@ public interface KeyValueStore {
     boolean containsKey(String key);
 
     int size();
+
+    /** Visit every key in the store exactly once. The {@code action} must not mutate the store. */
+    void forEachKey(Consumer<String> action);
 
     /**
      * The running logical size of this keyspace in bytes — the sum over every live mapping of

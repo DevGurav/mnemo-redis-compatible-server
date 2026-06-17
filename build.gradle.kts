@@ -50,10 +50,10 @@ application {
 }
 
 tasks.test {
-    // Default CI gate: plumbing + integration tests only. Data-structure specs excluded
-    // until the student implements them; run via `./gradlew specTest`.
+    // Default CI gate: plumbing + integration tests only. Data-structure specs and
+    // Testcontainers differential tests excluded; run those via their own tasks.
     useJUnitPlatform {
-        excludeTags("spec")
+        excludeTags("spec", "differential")
     }
     testLogging {
         events("passed", "skipped", "failed")
@@ -69,6 +69,22 @@ tasks.register<Test>("specTest") {
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform {
         includeTags("spec")
+    }
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
+}
+
+// Oracle testing: `./gradlew differentialTest` — requires Docker.
+// Runs identical command sequences against Mnemo and a real redis:7-alpine container
+// and asserts the RESP responses match exactly.
+tasks.register<Test>("differentialTest") {
+    description = "Differential (oracle) tests against a live redis:7-alpine container. Requires Docker."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform {
+        includeTags("differential")
     }
     testLogging {
         events("passed", "skipped", "failed")

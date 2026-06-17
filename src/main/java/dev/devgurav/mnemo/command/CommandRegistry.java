@@ -8,6 +8,7 @@ import dev.devgurav.mnemo.command.hashes.HSetCommand;
 import dev.devgurav.mnemo.command.keyspace.DbSizeCommand;
 import dev.devgurav.mnemo.command.keyspace.FlushAllCommand;
 import dev.devgurav.mnemo.command.keyspace.FlushDbCommand;
+import dev.devgurav.mnemo.command.keyspace.KeysCommand;
 import dev.devgurav.mnemo.command.keyspace.TypeCommand;
 import dev.devgurav.mnemo.command.list.LLenCommand;
 import dev.devgurav.mnemo.command.list.LPopCommand;
@@ -108,6 +109,7 @@ public final class CommandRegistry {
         r.register("RPOP", new RPopCommand());
         r.register("LLEN", new LLenCommand());
         r.register("LRANGE", new LRangeCommand());
+        r.register("KEYS", new KeysCommand());
         r.register("TYPE", new TypeCommand());
         r.register("DBSIZE", new DbSizeCommand());
         r.register("FLUSHDB", new FlushDbCommand());

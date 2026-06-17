@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Dict — a separate-chaining hash table with incremental rehashing and a pooled node allocator.
@@ -370,6 +371,11 @@ public final class Dict implements KeyValueStore {
      * <p>Read-only and single-threaded (the keyspace is owned by one command thread), so there is no
      * concurrent-modification hazard. {@code action} must not mutate this {@code Dict}.
      */
+    @Override
+    public void forEachKey(Consumer<String> action) {
+        forEach((k, v) -> action.accept(new String(k, StandardCharsets.UTF_8)));
+    }
+
     public void forEach(BiConsumer<byte[], byte[]> action) {
         forEachTable(ht[0], action);
         if (isRehashing()) {
