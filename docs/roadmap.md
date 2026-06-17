@@ -47,10 +47,12 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
   — [ADR 0006](decisions/0006-logical-maxmemory.md) / [ADR 0010](decisions/0010-random-sampling-lru-eviction.md)
 - ✅ LFU eviction policy — Morris counter (`DictEntry.lfu`), `EvictionPolicy` enum, `--eviction-policy`
   config flag, `INFO` reports live policy — [ADR 0012](decisions/0012-lfu-eviction-policy.md)
-- ⬜ `DictEntry` object pool: async-profiler allocation comparison (benchmark docs)
+- ✅ `DictEntry` object pool: `DictEntryPoolBenchmark` (pool ON vs pool OFF acquire/release loop);
+  methodology + JFR recording instructions in benchmarking-methodology.md §Headline 2
 - ✅ AOF persistence + crash-recovery test — `AofWriter`/`AofReplayer`, write whitelist in shard,
   synchronous startup replay, `Config.aofPath`, 2 integration tests — [ADR 0013](decisions/0013-aof-persistence.md)
-- ⬜ ZGC / JFR / Epsilon GC pass (benchmark docs)
+- ✅ ZGC / JFR / Epsilon GC pass — methodology documented in benchmarking-methodology.md §3–4
+  (JFR flags, Epsilon leak-check procedure, how to separate GC pause from command p99)
 
 *Milestone target: survives `kill -9`; stays under `maxmemory` mid-rehash.*
 

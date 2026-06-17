@@ -213,13 +213,44 @@ the stall, not a zero-cost grow. These are dev-profile numbers (laptop, single f
 directional and reproducible (`jmh { includes.set(listOf("RehashSpikeBenchmark")) }`), not yet a
 publish-grade multi-fork run.
 
-### Headline 2 — GC pause vs command latency (separate curves)
+### Headline 2 — `DictEntry` object pool eliminates allocation from the hot path
+
+**Benchmark:** [`DictEntryPoolBenchmark`](../src/jmh/java/dev/devgurav/mnemo/bench/DictEntryPoolBenchmark.java)  
+Run: `./gradlew jmh -Pjmh.includes=DictEntryPoolBenchmark`
+
+Two variants share the same acquire-set-release loop; they differ only in whether the free list is used:
+
+- `poolOn` — acquire from the pre-warmed free list (no `new DictEntry()`), release back after use.
+- `poolOff` — always calls `new DictEntry()`, simulating a Dict without a pool; the node leaks as
+  short-lived garbage to let GC see its true allocation pressure.
+
+The allocation signal is in JFR (`jdk.ObjectAllocationInNewTLAB`) or async-profiler:
+
+- Pool ON: `DictEntry.<init>` must be absent or ≤ noise level.
+- Pool OFF: `DictEntry.<init>` is the dominant allocator on the benchmark hot path.
+
+Add to JVM args to record while running JMH:
+
+```text
+-XX:StartFlightRecording=filename=pool-benchmark.jfr,settings=profile,dumponexit=true
+```
+
+| Metric | Pool ON | Pool OFF |
+| --- | --- | --- |
+| Throughput (ops/µs) | — | — |
+| p99 latency (µs) | — | — |
+| `DictEntry` alloc rate (JFR MB/s) | — | — |
+
+*(Fill after running on the project machine. Directional expectation: pool ON allocates zero
+DictEntry objects after warmup; pool OFF allocates one per operation, yielding measurable GC churn
+at high call rates and an elevated p99 compared to pool ON.)*
+
+### Headline 2b — ZGC pause vs command latency (separate curves)
 
 | Metric | Value |
 | --- | --- |
 | ZGC max pause (`gc.log` / JFR) | — |
 | Command p99 (JMH `SampleTime`) | — |
-| Allocation rate, pool OFF → ON (async-profiler / JFR) | — → — MB/s |
 
 ### Headline 3 — end-to-end throughput (`redis-benchmark`)
 
