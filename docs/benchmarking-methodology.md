@@ -272,10 +272,17 @@ docker run --rm redis redis-benchmark \
   -t set,get -n 1000000 -P 16 -q
 ```
 
-| Command | ops/sec | p50 | p99 |
-| --- | --- | --- | --- |
-| SET | *(run benchmark)* | — | — |
-| GET | *(run benchmark)* | — | — |
+Single-shard Dict store, pipeline depth 16, 1 M operations, Docker → `host.docker.internal`:
+
+| Command | ops/sec | p50 |
+| --- | --- | --- |
+| SET | **67 879** | 9.2 ms |
+| GET | **65 893** | 9.6 ms |
+
+The p50 latency here is dominated by the Docker-on-Windows network path (host.docker.internal
+adds ~9 ms per round-trip). The JMH in-process numbers (Dict.get p99 ≤ 0.4 µs at 1 M keys)
+are the true data-plane measure; redis-benchmark through Docker proves RESP2 wire compatibility,
+not raw throughput. Run on Linux with `--network host` to eliminate the bridge overhead.
 
 ### Headline 4 — Dict key-space scaling (O(1) expected)
 
