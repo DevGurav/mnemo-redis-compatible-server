@@ -18,7 +18,7 @@ final class HashReplies {
      *         if the key is a hash or does not exist (in which case the command may proceed).
      */
     static RespValue wrongTypeError(CommandContext ctx, String key) {
-        if (ctx.db().isString(key) || ctx.db().isZSet(key)) {
+        if (ctx.db().isString(key) || ctx.db().isZSet(key) || ctx.db().isList(key)) {
             return RespValue.error(WRONGTYPE);
         }
         return null;

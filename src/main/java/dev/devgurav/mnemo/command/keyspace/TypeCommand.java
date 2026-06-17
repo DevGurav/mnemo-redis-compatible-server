@@ -5,8 +5,8 @@ import dev.devgurav.mnemo.command.CommandContext;
 import dev.devgurav.mnemo.net.resp.RespValue;
 
 /**
- * {@code TYPE key} → the key's value type as a simple string: {@code string}, {@code zset}, or
- * {@code none} when the key does not exist.
+ * {@code TYPE key} → the key's value type as a simple string: {@code string}, {@code zset},
+ * {@code hash}, {@code list}, or {@code none} when the key does not exist.
  */
 public final class TypeCommand implements Command {
     @Override
@@ -18,6 +18,7 @@ public final class TypeCommand implements Command {
         String type = ctx.db().isString(key) ? "string"
                     : ctx.db().isZSet(key)   ? "zset"
                     : ctx.db().isHash(key)   ? "hash"
+                    : ctx.db().isList(key)   ? "list"
                     : "none";
         return new RespValue.SimpleString(type);
     }
