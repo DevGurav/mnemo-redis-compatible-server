@@ -16,7 +16,7 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
 
 *Milestone met: `redis-cli` set/get works in-process via `EndToEndTest`.*
 
-## Week 2 — Structures + headline optimization 🔶
+## Week 2 — Structures + headline optimization ✅
 
 - ✅ Incremental (dual-table) rehashing in `Dict` — [ADR 0004](decisions/0004-incremental-rehashing.md)
 - ✅ Span-augmented skip list + `ZSet` sorted set — [ADR 0005](decisions/0005-skiplist-over-treemap.md)
@@ -32,8 +32,8 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
   `Dict.forEach` iterator ([ADR 0008](decisions/0008-hash-type.md))
 - ✅ Lists (`LPUSH`/`RPUSH`/`LPOP`/`RPOP`/`LLEN`/`LRANGE`) on an `IntrusiveList` with a `ListNode`
   pool; `INFO` over Server/Clients/Memory/Keyspace ([ADR 0009](decisions/0009-list-type-and-info.md))
-- ⬜ `KEYS`
-- ⬜ Differential tests vs. a real Redis instance
+- ✅ `KEYS` (Redis-compatible glob pattern: `*`, `?`, `[charset]`, `[^charset]`, ranges, `\` escape)
+- ✅ Differential (oracle) tests vs. a real `redis:7-alpine` via Testcontainers (`./gradlew differentialTest`)
 
 *Milestone target: first `redis-benchmark` numbers.*
 

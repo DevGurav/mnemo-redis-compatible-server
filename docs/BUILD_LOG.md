@@ -2,6 +2,39 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 (tail) — KEYS + differential oracle tests
+
+Closed the two remaining Week-2 items and declared W2 complete.
+
+**Context.** `KEYS` and differential tests were deferred from the W2 main push because they require
+a cross-namespace scan (touching all four keyspace maps) and an external Redis process to compare
+against. Both depended on the W2 data-structure work being stable first.
+
+**What was built.**
+
+- **`KEYS pattern`** — scans all four namespaces (strings, zsets, hashes, lists) and returns matching
+  keys as a RESP array. Pattern matching via `GlobPattern` (package-private, `command.keyspace`):
+  full Redis glob subset — `*` (zero-or-more), `?` (one char), `[charset]`, `[^charset]` / `[!charset]`
+  negation, `[a-z]` ranges, and `\x` literal-escape. The scan is exposed through
+  `KeyValueStore.forEachKey(Consumer<String>)` (new interface method, implemented in both
+  `HashMapStore` and `Dict`) and `Db.keys(Predicate<String>)` so the command layer owns the
+  pattern-matching concern and `Db` stays decoupled from it.
+- **Differential (oracle) tests** — `DifferentialTest` boots a `redis:7-alpine` container via
+  Testcontainers alongside a live Mnemo instance and asserts that identical command sequences return
+  identical RESP wire responses. Covers: strings (SET/GET/DEL/EXISTS), integers (INCR/DECRBY),
+  WRONGTYPE errors, hashes (HSET/HGET/HGETALL/HDEL/HLEN), lists (LPUSH/RPUSH/LRANGE/LPOP/RPOP),
+  sorted sets (ZADD/ZRANK/ZRANGE), KEYS glob patterns (including cross-namespace), TYPE, DBSIZE,
+  FLUSHDB. Unordered-response commands (KEYS, HGETALL) are compared semantically (sorted element
+  list / field→value map) rather than byte-for-byte. Tagged `@differential`; run with
+  `./gradlew differentialTest` (requires Docker). Excluded from the default `./gradlew test` gate so
+  CI stays portable on machines without a container daemon.
+
+**Verification.** `./gradlew test` → **92 green** (+13 `KeysCommandTest`); `specTest` → 60
+(unchanged). No regressions across any prior test.
+
+**What's next.** Week 2 is complete. Week 3 continues — TTL (lazy + active expiry), LFU eviction
+policy, AOF persistence. See [roadmap](roadmap.md).
+
 ## Week 3 — Memory bounding + approximate-LRU eviction
 
 Implemented the `maxmemory` bound [ADR 0006](decisions/0006-logical-maxmemory.md) promised, with a
