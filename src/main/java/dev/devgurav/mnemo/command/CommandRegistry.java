@@ -62,23 +62,30 @@ public final class CommandRegistry {
     }
 
     /**
-     * The default command set, with a fresh {@link ServerStats} backing {@code INFO}. Convenient for
-     * tests and any caller that doesn't share the server's live connection counter.
+     * The default command set, with a fresh {@link ServerStats} backing {@code INFO} and no
+     * {@code maxmemory} bound. Convenient for tests and any caller that doesn't share the server's
+     * live connection counter.
      */
     public static CommandRegistry standard() {
-        return standard(new ServerStats());
+        return standard(new ServerStats(), 0);
+    }
+
+    /** As {@link #standard(ServerStats, long)} with no {@code maxmemory} bound. */
+    public static CommandRegistry standard(ServerStats stats) {
+        return standard(stats, 0);
     }
 
     /**
-     * The default command set, with {@code INFO} backed by the supplied {@link ServerStats} so it
-     * reports the same uptime and live connection count the server tracks.
+     * The default command set, with {@code INFO} backed by the supplied {@link ServerStats} (so it
+     * reports the server's live uptime and connection count) and the given {@code maxmemory} bound
+     * (so it reports the configured limit and eviction policy).
      */
-    public static CommandRegistry standard(ServerStats stats) {
+    public static CommandRegistry standard(ServerStats stats, long maxmemory) {
         CommandRegistry r = new CommandRegistry();
         r.register("PING", new PingCommand());
         r.register("ECHO", new EchoCommand());
         r.register("COMMAND", new CommandCommand());
-        r.register("INFO", new InfoCommand(stats));
+        r.register("INFO", new InfoCommand(stats, maxmemory));
         r.register("SET", new SetCommand());
         r.register("GET", new GetCommand());
         r.register("DEL", new DelCommand());

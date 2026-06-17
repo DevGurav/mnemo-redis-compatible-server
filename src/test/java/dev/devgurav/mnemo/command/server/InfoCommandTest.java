@@ -30,7 +30,7 @@ class InfoCommandTest {
     @BeforeEach
     void setUp() {
         stats = new ServerStats();
-        info = new InfoCommand(stats);
+        info = new InfoCommand(stats, 0); // unlimited maxmemory by default
         db = new Db(new HashMapStore());
     }
 
@@ -84,11 +84,27 @@ class InfoCommandTest {
     }
 
     @Test
-    void memorySectionReportsLogicalCapacityAndUsedBytes() {
-        Map<String, String> f = fields(run("INFO"));
-        assertThat(f).containsEntry("maxmemory", "0"); // unlimited until the W3 eviction limit
-        assertThat(f).containsKey("maxmemory_policy");
-        assertThat(Long.parseLong(f.get("used_memory"))).isPositive();
+    void memorySectionReportsLogicalUsedBytesThatGrowWithTheKeyspace() {
+        Map<String, String> empty = fields(run("INFO"));
+        assertThat(empty).containsEntry("maxmemory", "0");                 // unlimited by default
+        assertThat(empty).containsEntry("maxmemory_policy", "noeviction"); // no bound => no policy
+        assertThat(empty).containsEntry("evicted_keys", "0");
+        long usedEmpty = Long.parseLong(empty.get("used_memory"));
+        assertThat(usedEmpty).isZero(); // logical accounting: an empty keyspace is 0 bytes
+
+        db.set("k", "a-value".getBytes(StandardCharsets.UTF_8));
+        long usedAfter = Long.parseLong(fields(run("INFO")).get("used_memory"));
+        assertThat(usedAfter).isGreaterThan(usedEmpty); // grew by key+value+overhead
+    }
+
+    @Test
+    void memorySectionReflectsAConfiguredMaxmemoryAndPolicy() {
+        InfoCommand bounded = new InfoCommand(stats, 1_000_000);
+        String body = new String(((RespValue.BulkString) bounded.execute(new CommandContext(
+                db, List.of("INFO".getBytes(StandardCharsets.UTF_8))))).value(), StandardCharsets.UTF_8);
+        Map<String, String> f = fields(body);
+        assertThat(f).containsEntry("maxmemory", "1000000");
+        assertThat(f).containsEntry("maxmemory_policy", "allkeys-lru");
     }
 
     @Test

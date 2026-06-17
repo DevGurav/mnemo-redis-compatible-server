@@ -18,21 +18,20 @@ import java.util.Locale;
  * <ul>
  *   <li><b>Server</b> — version, JDK, GC, and uptime (from {@link ServerStats}).</li>
  *   <li><b>Clients</b> — currently connected channels (from {@link ServerStats}).</li>
- *   <li><b>Memory</b> — logical capacity ({@code maxmemory}; 0 = unlimited until the eviction limit
- *       lands in W3, ADR 0006) and the JVM allocator's currently used bytes.</li>
+ *   <li><b>Memory</b> — the logical-byte budget ({@code maxmemory}; 0 = unlimited), the live logical
+ *       {@code used_memory} of the evictable keyspace ({@link Db#usedMemory()}, ADR 0006), and the
+ *       cumulative {@code evicted_keys} count.</li>
  *   <li><b>Keyspace</b> — key counts, broken down across all four value types (from {@link Db}).</li>
  * </ul>
- *
- * <p>The per-type-counted logical <em>byte</em> accounting ({@code used_payload_bytes}) is the W3
- * eviction-counter work (ADR 0006) and is intentionally not faked here; {@code used_memory} reports
- * the real heap figure instead.
  */
 public final class InfoCommand implements Command {
 
     private final ServerStats stats;
+    private final long maxmemory;
 
-    public InfoCommand(ServerStats stats) {
+    public InfoCommand(ServerStats stats, long maxmemory) {
         this.stats = stats;
+        this.maxmemory = maxmemory;
     }
 
     @Override
@@ -45,7 +44,7 @@ public final class InfoCommand implements Command {
         StringBuilder sb = new StringBuilder(512);
         if (wants(section, "server"))   appendServer(sb);
         if (wants(section, "clients"))  appendClients(sb);
-        if (wants(section, "memory"))   appendMemory(sb);
+        if (wants(section, "memory"))   appendMemory(sb, ctx.db());
         if (wants(section, "keyspace")) appendKeyspace(sb, ctx.db());
 
         return RespValue.bulk(sb.toString().getBytes(StandardCharsets.UTF_8));
@@ -70,13 +69,13 @@ public final class InfoCommand implements Command {
         sb.append("\r\n");
     }
 
-    private void appendMemory(StringBuilder sb) {
-        Runtime rt = Runtime.getRuntime();
-        long used = rt.totalMemory() - rt.freeMemory();
+    private void appendMemory(StringBuilder sb, Db db) {
         sb.append("# Memory\r\n");
-        sb.append("maxmemory:0\r\n");                       // logical capacity; 0 = unlimited (W3: ADR 0006)
-        sb.append("maxmemory_policy:noeviction\r\n");
-        sb.append("used_memory:").append(used).append("\r\n");
+        sb.append("maxmemory:").append(maxmemory).append("\r\n");          // 0 = unlimited
+        sb.append("maxmemory_policy:")
+          .append(maxmemory > 0 ? "allkeys-lru" : "noeviction").append("\r\n");
+        sb.append("used_memory:").append(db.usedMemory()).append("\r\n");  // logical bytes (ADR 0006)
+        sb.append("evicted_keys:").append(db.evictedKeys()).append("\r\n");
         sb.append("\r\n");
     }
 
