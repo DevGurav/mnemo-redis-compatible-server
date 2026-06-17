@@ -2,6 +2,44 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 3 — TTL expiry + LFU eviction policy
+
+Added per-key time-to-live and a second eviction policy to the server.
+
+**Context.** The evictor (ADR 0010) bounded memory but evicted based on recency alone. TTL and
+frequency-based eviction were the remaining W3 semantics items before AOF persistence.
+
+**What was built.**
+
+- **TTL infrastructure** — `Db` gains a single `Map<String, Long> expiries` (key → epoch ms) spanning
+  all four namespaces. `expireIfNeeded(key)` is called at the top of every read accessor; it removes
+  the key from all namespaces and the expiry map if the current time is past the stored deadline.
+  `Db.set()` always removes any prior TTL on the key (matching Redis SET semantics). See
+  [ADR 0011](decisions/0011-ttl-lazy-and-active-expiry.md).
+- **Active expiry sweep** — `TtlSweeper` is co-scheduled with the shard thread (called from
+  `ShardExecutor.dispatch()` before each command) at most 10 times/second, sampling up to 20 keys per
+  sweep — no timer thread, no cross-thread access, no synchronisation.
+- **Seven TTL commands** — EXPIRE, PEXPIRE, EXPIREAT, PEXPIREAT, TTL, PTTL, PERSIST — all registered
+  in `CommandRegistry`. `TtlCommandsTest` covers 20 cases including lazy expiry on GET/EXISTS/TTL,
+  cross-type TTL (hash/list/zset), SET-clears-TTL, negative-seconds error, and arity errors.
+- **LFU eviction policy** — `DictEntry` gains an `int lfu` Morris counter (0–255), initialised to
+  `LFU_INIT = 5` on insert. `Dict.incrementLfu()` probabilistically increments the counter on every
+  read and write (log-scale saturation). `EvictionPolicy` enum (`NOEVICTION`, `ALLKEYS_LRU`,
+  `ALLKEYS_LFU`) is parsed from `--eviction-policy` / `MNEMO_EVICTION_POLICY` at startup. The existing
+  random-sampling loop in `Evictor` branches on `entry.lfu` vs `entry.lruTime` depending on policy —
+  zero additional allocation. See [ADR 0012](decisions/0012-lfu-eviction-policy.md).
+- **INFO reports live policy** — `maxmemory_policy` in `INFO memory` now reflects the actual
+  configured `EvictionPolicy` rather than a hardcoded string.
+
+**Verification.** `./gradlew test` → **115 green** (+36 vs last W3 entry: 20 `TtlCommandsTest` + 8
+new `EvictorTest` LFU cases + others from InfoCommand policy fix); `specTest` → 60 (unchanged). All
+prior LRU/memory tests continue to pass.
+
+**Decisions recorded.** [ADR 0011](decisions/0011-ttl-lazy-and-active-expiry.md) and
+[ADR 0012](decisions/0012-lfu-eviction-policy.md).
+
+**What's next.** AOF persistence (AofWriter, AofReplayer, crash-recovery test, ADR 0013).
+
 ## Week 2 (tail) — KEYS + differential oracle tests
 
 Closed the two remaining Week-2 items and declared W2 complete.

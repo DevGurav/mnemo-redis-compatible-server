@@ -180,9 +180,11 @@ public final class Dict implements KeyValueStore {
             // New key during rehash: always insert into ht[1] so the entry survives promotion.
             ht[1][idx1] = pool.acquire(hash, keyBytes, value, ht[1][idx1]);
             ht[1][idx1].lruTime = ++lruClock;
+            ht[1][idx1].lfu    = DictEntry.LFU_INIT;
         } else {
             ht[0][idx0] = pool.acquire(hash, keyBytes, value, ht[0][idx0]);
             ht[0][idx0].lruTime = ++lruClock;
+            ht[0][idx0].lfu    = DictEntry.LFU_INIT;
         }
 
         usedMemory.addAndGet(SizeWeigher.weigh(keyBytes, value)); // new mapping: charge full weight
@@ -202,6 +204,17 @@ public final class Dict implements KeyValueStore {
         usedMemory.addAndGet((long) value.length - e.value.length);
         e.value   = value;
         e.lruTime = ++lruClock;
+        e.lfu     = incrementLfu(e.lfu);
+    }
+
+    /**
+     * Morris-counter increment for the LFU approximation (ADR 0012).
+     * Probability of incrementing = 1 / (current × LFU_LOG_FACTOR + 1) — log-scale saturation.
+     */
+    private static int incrementLfu(int current) {
+        if (current >= 255) return 255;
+        double p = 1.0 / ((double) current * 10 + 1.0);
+        return (Math.random() < p) ? current + 1 : current;
     }
 
     /**
@@ -214,7 +227,8 @@ public final class Dict implements KeyValueStore {
         int idx0 = (hash & 0x7FFF_FFFF) & (ht[0].length - 1);
         for (DictEntry e = ht[0][idx0]; e != null; e = e.next) {
             if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
-                e.lruTime = ++lruClock; // a read counts as an access for LRU
+                e.lruTime = ++lruClock;
+                e.lfu     = incrementLfu(e.lfu);
                 return e.value;
             }
         }
@@ -223,7 +237,8 @@ public final class Dict implements KeyValueStore {
             int idx1 = (hash & 0x7FFF_FFFF) & (ht[1].length - 1);
             for (DictEntry e = ht[1][idx1]; e != null; e = e.next) {
                 if (e.hash == hash && Arrays.equals(e.key, keyBytes)) {
-                    e.lruTime = ++lruClock; // a read counts as an access for LRU
+                    e.lruTime = ++lruClock;
+                    e.lfu     = incrementLfu(e.lfu);
                     return e.value;
                 }
             }

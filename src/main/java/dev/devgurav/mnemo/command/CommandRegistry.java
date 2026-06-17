@@ -10,6 +10,13 @@ import dev.devgurav.mnemo.command.keyspace.FlushAllCommand;
 import dev.devgurav.mnemo.command.keyspace.FlushDbCommand;
 import dev.devgurav.mnemo.command.keyspace.KeysCommand;
 import dev.devgurav.mnemo.command.keyspace.TypeCommand;
+import dev.devgurav.mnemo.command.ttl.ExpireAtCommand;
+import dev.devgurav.mnemo.command.ttl.ExpireCommand;
+import dev.devgurav.mnemo.command.ttl.PExpireAtCommand;
+import dev.devgurav.mnemo.command.ttl.PExpireCommand;
+import dev.devgurav.mnemo.command.ttl.PTtlCommand;
+import dev.devgurav.mnemo.command.ttl.PersistCommand;
+import dev.devgurav.mnemo.command.ttl.TtlCommand;
 import dev.devgurav.mnemo.command.list.LLenCommand;
 import dev.devgurav.mnemo.command.list.LPopCommand;
 import dev.devgurav.mnemo.command.list.LPushCommand;
@@ -34,6 +41,7 @@ import dev.devgurav.mnemo.command.strings.SetCommand;
 import dev.devgurav.mnemo.net.resp.RespValue;
 import dev.devgurav.mnemo.server.ServerStats;
 import dev.devgurav.mnemo.store.Db;
+import dev.devgurav.mnemo.store.evict.EvictionPolicy;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -82,11 +90,16 @@ public final class CommandRegistry {
      * (so it reports the configured limit and eviction policy).
      */
     public static CommandRegistry standard(ServerStats stats, long maxmemory) {
+        return standard(stats, maxmemory, EvictionPolicy.ALLKEYS_LRU);
+    }
+
+    /** As {@link #standard(ServerStats, long)} but also propagates the eviction policy to INFO. */
+    public static CommandRegistry standard(ServerStats stats, long maxmemory, EvictionPolicy policy) {
         CommandRegistry r = new CommandRegistry();
         r.register("PING", new PingCommand());
         r.register("ECHO", new EchoCommand());
         r.register("COMMAND", new CommandCommand());
-        r.register("INFO", new InfoCommand(stats, maxmemory));
+        r.register("INFO", new InfoCommand(stats, maxmemory, policy));
         r.register("SET", new SetCommand());
         r.register("GET", new GetCommand());
         r.register("DEL", new DelCommand());
@@ -109,6 +122,13 @@ public final class CommandRegistry {
         r.register("RPOP", new RPopCommand());
         r.register("LLEN", new LLenCommand());
         r.register("LRANGE", new LRangeCommand());
+        r.register("EXPIRE",    new ExpireCommand());
+        r.register("PEXPIRE",   new PExpireCommand());
+        r.register("EXPIREAT",  new ExpireAtCommand());
+        r.register("PEXPIREAT", new PExpireAtCommand());
+        r.register("TTL",       new TtlCommand());
+        r.register("PTTL",      new PTtlCommand());
+        r.register("PERSIST",   new PersistCommand());
         r.register("KEYS", new KeysCommand());
         r.register("TYPE", new TypeCommand());
         r.register("DBSIZE", new DbSizeCommand());

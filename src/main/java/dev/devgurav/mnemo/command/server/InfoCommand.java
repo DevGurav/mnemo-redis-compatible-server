@@ -5,6 +5,7 @@ import dev.devgurav.mnemo.command.CommandContext;
 import dev.devgurav.mnemo.net.resp.RespValue;
 import dev.devgurav.mnemo.server.ServerStats;
 import dev.devgurav.mnemo.store.Db;
+import dev.devgurav.mnemo.store.evict.EvictionPolicy;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -28,10 +29,16 @@ public final class InfoCommand implements Command {
 
     private final ServerStats stats;
     private final long maxmemory;
+    private final EvictionPolicy evictionPolicy;
 
     public InfoCommand(ServerStats stats, long maxmemory) {
-        this.stats = stats;
-        this.maxmemory = maxmemory;
+        this(stats, maxmemory, EvictionPolicy.ALLKEYS_LRU);
+    }
+
+    public InfoCommand(ServerStats stats, long maxmemory, EvictionPolicy evictionPolicy) {
+        this.stats          = stats;
+        this.maxmemory      = maxmemory;
+        this.evictionPolicy = evictionPolicy;
     }
 
     @Override
@@ -73,9 +80,10 @@ public final class InfoCommand implements Command {
         sb.append("# Memory\r\n");
         sb.append("maxmemory:").append(maxmemory).append("\r\n");          // 0 = unlimited
         sb.append("maxmemory_policy:")
-          .append(maxmemory > 0 ? "allkeys-lru" : "noeviction").append("\r\n");
+          .append(maxmemory > 0 ? evictionPolicy.toConfigString() : "noeviction").append("\r\n");
         sb.append("used_memory:").append(db.usedMemory()).append("\r\n");  // logical bytes (ADR 0006)
         sb.append("evicted_keys:").append(db.evictedKeys()).append("\r\n");
+        sb.append("expired_keys:").append(db.expiredKeys()).append("\r\n");
         sb.append("\r\n");
     }
 

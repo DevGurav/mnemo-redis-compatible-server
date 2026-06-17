@@ -103,6 +103,61 @@ class EvictorTest {
                 .isEqualTo(new String(VALUE, StandardCharsets.UTF_8));
     }
 
+    // ---- LFU policy ----
+
+    @Test
+    void lfuNewKeyStartsAtLfuInit() {
+        Dict dict = new Dict();
+        Db db = new Db(dict);
+        db.set("k", VALUE);
+        // After one insert the entry's lfu counter should be LFU_INIT.
+        dev.devgurav.mnemo.store.entry.DictEntry entry = dict.randomEntry(0);
+        assertThat(entry).isNotNull();
+        assertThat(entry.lfu).isEqualTo(dev.devgurav.mnemo.store.entry.DictEntry.LFU_INIT);
+    }
+
+    @Test
+    void lfuFrequentKeyOutlivesRareKeys() {
+        Dict dict = new Dict();
+        Db db = new Db(dict);
+        long maxmemory = 100 * entryBytes();
+        Evictor evictor = new Evictor(dict, db, maxmemory, Evictor.DEFAULT_SAMPLE_SIZE,
+                EvictionPolicy.ALLKEYS_LFU);
+
+        db.set("hot", VALUE);
+        // Access "hot" many times so its lfu counter saturates above the cold keys' LFU_INIT.
+        for (int i = 0; i < 300; i++) db.get("hot");
+
+        // Insert enough cold keys to push far over budget.
+        for (int i = 0; i < 400; i++) {
+            db.set(key(i), VALUE);
+            evictor.evictIfNeeded();
+        }
+
+        // "hot" was accessed hundreds of times; cold keys each touched once. Under LFU, cold keys
+        // are evicted first — "hot" must survive.
+        assertThat(db.isString("hot")).isTrue();
+    }
+
+    @Test
+    void lfuKeepsMemoryBoundedUnderSustainedInserts() {
+        Dict dict = new Dict();
+        Db db = new Db(dict);
+        long maxmemory = 200 * entryBytes();
+        Evictor evictor = new Evictor(dict, db, maxmemory, Evictor.DEFAULT_SAMPLE_SIZE,
+                EvictionPolicy.ALLKEYS_LFU);
+
+        for (int i = 0; i < 50_000; i++) {
+            evictor.evictIfNeeded();
+            db.set(key(i), VALUE);
+        }
+        evictor.evictIfNeeded();
+
+        assertThat(db.usedMemory()).isLessThanOrEqualTo(maxmemory);
+        assertThat(db.stringCount()).isLessThanOrEqualTo(200);
+        assertThat(db.evictedKeys()).isGreaterThan(49_000);
+    }
+
     @Test
     void evictionUpdatesUsedMemoryConsistentlyWithReinserts() {
         Dict dict = new Dict();

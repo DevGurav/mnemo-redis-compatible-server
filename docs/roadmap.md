@@ -39,11 +39,14 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
 
 ## Week 3 — Ops + hardening 🔶
 
-- ⬜ TTL (lazy + active expiry)
+- ✅ TTL (lazy + active expiry) — 7 commands (EXPIRE/PEXPIRE/EXPIREAT/PEXPIREAT/TTL/PTTL/PERSIST),
+  single expiry map across all namespaces, `TtlSweeper` co-scheduled on shard thread, 20 unit tests
+  — [ADR 0011](decisions/0011-ttl-lazy-and-active-expiry.md)
 - ✅ Approximate-LRU eviction + the logical-capacity protocol: allocation-free random sampler over the
   `Dict`, logical access clock, `maxmemory` config, `used_memory`/`evicted_keys` in `INFO`
   — [ADR 0006](decisions/0006-logical-maxmemory.md) / [ADR 0010](decisions/0010-random-sampling-lru-eviction.md)
-- ⬜ LFU eviction policy
+- ✅ LFU eviction policy — Morris counter (`DictEntry.lfu`), `EvictionPolicy` enum, `--eviction-policy`
+  config flag, `INFO` reports live policy — [ADR 0012](decisions/0012-lfu-eviction-policy.md)
 - ⬜ `DictEntry` object pool: async-profiler allocation comparison
 - ⬜ AOF persistence + crash-recovery test
 - ⬜ ZGC / JFR / Epsilon GC pass

@@ -41,68 +41,143 @@ public final class Db {
     private final Map<String, Dict> hashes = new HashMap<>();
     private final Map<String, IntrusiveList> lists = new HashMap<>();
 
-    /** Cumulative count of keys removed by the evictor; surfaced via {@code INFO}. Single-thread owned. */
+    /**
+     * Per-key absolute expiry in epoch milliseconds. Covers all four namespaces.
+     * A key absent from this map has no TTL (lives forever until explicitly deleted).
+     */
+    private final Map<String, Long> expiries = new HashMap<>();
+
+    /** Cumulative keys removed by the evictor; surfaced via {@code INFO}. */
     private long evictedKeys;
+
+    /** Cumulative keys removed by lazy or active TTL expiry; surfaced via {@code INFO}. */
+    private long expiredKeys;
 
     public Db(KeyValueStore store) {
         this.store = store;
     }
 
-    // --- String keyspace ---
+    // -------------------------------------------------------------------------
+    // Lazy expiry — called before every read and exists/type check
+    // -------------------------------------------------------------------------
 
-    /** Stores a string value, overwriting any prior value of any type under {@code key}. */
+    /**
+     * If {@code key} has a TTL and it has passed, remove the key from every namespace and the expiry
+     * map, and increment {@link #expiredKeys}. Returns {@code true} when the key was just expired.
+     * Idempotent: a second call on the same key (already deleted) returns {@code false}.
+     */
+    private boolean expireIfNeeded(String key) {
+        Long exp = expiries.get(key);
+        if (exp == null) return false;
+        if (System.currentTimeMillis() < exp) return false;
+        store.remove(key);
+        zsets.remove(key);
+        hashes.remove(key);
+        lists.remove(key);
+        expiries.remove(key);
+        expiredKeys++;
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // String keyspace
+    // -------------------------------------------------------------------------
+
+    /**
+     * Stores a string value, overwriting any prior value of any type under {@code key}.
+     * {@code SET} always clears any existing TTL, matching Redis semantics.
+     */
     public void set(String key, byte[] value) {
+        expiries.remove(key); // SET removes any existing TTL
         zsets.remove(key);
         hashes.remove(key);
         lists.remove(key);
         store.put(key, value);
     }
 
-    public byte[] get(String key) { return store.get(key); }
+    public byte[] get(String key) {
+        expireIfNeeded(key);
+        return store.get(key);
+    }
 
-    // --- Sorted-set keyspace ---
+    // -------------------------------------------------------------------------
+    // Sorted-set keyspace
+    // -------------------------------------------------------------------------
 
     /** The sorted set at {@code key}, or {@code null} if no sorted set is stored there. */
-    public ZSet zset(String key) { return zsets.get(key); }
+    public ZSet zset(String key) {
+        expireIfNeeded(key);
+        return zsets.get(key);
+    }
 
     /** The sorted set at {@code key}, creating an empty one if absent. */
     public ZSet zsetForWrite(String key) {
+        expireIfNeeded(key);
         return zsets.computeIfAbsent(key, k -> new ZSet());
     }
 
-    // --- Hash keyspace ---
+    // -------------------------------------------------------------------------
+    // Hash keyspace
+    // -------------------------------------------------------------------------
 
     /** The hash (field → value {@link Dict}) at {@code key}, or {@code null} if absent. */
-    public Dict hash(String key) { return hashes.get(key); }
+    public Dict hash(String key) {
+        expireIfNeeded(key);
+        return hashes.get(key);
+    }
 
     /** The hash at {@code key}, creating an empty one if absent. */
     public Dict hashForWrite(String key) {
+        expireIfNeeded(key);
         return hashes.computeIfAbsent(key, k -> new Dict());
     }
 
-    // --- List keyspace ---
+    // -------------------------------------------------------------------------
+    // List keyspace
+    // -------------------------------------------------------------------------
 
     /** The list at {@code key}, or {@code null} if no list is stored there. */
-    public IntrusiveList list(String key) { return lists.get(key); }
+    public IntrusiveList list(String key) {
+        expireIfNeeded(key);
+        return lists.get(key);
+    }
 
     /** The list at {@code key}, creating an empty one if absent. */
     public IntrusiveList listForWrite(String key) {
+        expireIfNeeded(key);
         return lists.computeIfAbsent(key, k -> new IntrusiveList());
     }
 
-    // --- Type inspection (one type per key) ---
+    // -------------------------------------------------------------------------
+    // Type inspection (one type per key)
+    // -------------------------------------------------------------------------
 
-    public boolean isString(String key) { return store.containsKey(key); }
+    public boolean isString(String key) {
+        expireIfNeeded(key);
+        return store.containsKey(key);
+    }
 
-    public boolean isZSet(String key) { return zsets.containsKey(key); }
+    public boolean isZSet(String key) {
+        expireIfNeeded(key);
+        return zsets.containsKey(key);
+    }
 
-    public boolean isHash(String key) { return hashes.containsKey(key); }
+    public boolean isHash(String key) {
+        expireIfNeeded(key);
+        return hashes.containsKey(key);
+    }
 
-    public boolean isList(String key) { return lists.containsKey(key); }
+    public boolean isList(String key) {
+        expireIfNeeded(key);
+        return lists.containsKey(key);
+    }
 
-    // --- Cross-type key operations ---
+    // -------------------------------------------------------------------------
+    // Cross-type key operations
+    // -------------------------------------------------------------------------
 
     public boolean delete(String key) {
+        expiries.remove(key);
         boolean removedZset   = zsets.remove(key) != null;
         boolean removedHash   = hashes.remove(key) != null;
         boolean removedList   = lists.remove(key) != null;
@@ -111,6 +186,7 @@ public final class Db {
     }
 
     public boolean exists(String key) {
+        expireIfNeeded(key);
         return store.containsKey(key)
                 || zsets.containsKey(key)
                 || hashes.containsKey(key)
@@ -124,28 +200,99 @@ public final class Db {
         zsets.clear();
         hashes.clear();
         lists.clear();
+        expiries.clear();
     }
 
-    // --- Per-type key counts (for INFO Keyspace) ---
+    // -------------------------------------------------------------------------
+    // Per-type key counts (for INFO Keyspace)
+    // -------------------------------------------------------------------------
 
     public int stringCount() { return store.size(); }
+    public int zsetCount()   { return zsets.size(); }
+    public int hashCount()   { return hashes.size(); }
+    public int listCount()   { return lists.size(); }
 
-    public int zsetCount() { return zsets.size(); }
-
-    public int hashCount() { return hashes.size(); }
-
-    public int listCount() { return lists.size(); }
-
-    // --- Keyspace scan ---
+    // -------------------------------------------------------------------------
+    // TTL operations
+    // -------------------------------------------------------------------------
 
     /**
-     * Returns all keys in all four namespaces that satisfy {@code filter}.
-     * Used by the {@code KEYS} command: the filter is a glob-pattern predicate built in the command
-     * layer so that {@code Db} stays decoupled from pattern-matching logic.
+     * Sets the absolute expiry (epoch ms) for {@code key}. Replaces any prior TTL. No-op if the key
+     * does not exist. Called by EXPIRE, PEXPIRE, EXPIREAT, PEXPIREAT after verifying the key exists.
+     */
+    public void setExpiry(String key, long absoluteMs) {
+        expiries.put(key, absoluteMs);
+    }
+
+    /**
+     * Removes the TTL for {@code key} (PERSIST). Returns {@code true} if a TTL was present and
+     * removed; {@code false} if the key has no TTL or does not exist.
+     */
+    public boolean removeExpiry(String key) {
+        return expiries.remove(key) != null;
+    }
+
+    /**
+     * Returns the remaining TTL in milliseconds for {@code key}, or:
+     * <ul>
+     *   <li>{@code -1} — the key exists but has no TTL (persistent)</li>
+     *   <li>{@code -2} — the key does not exist (or has just been lazily expired)</li>
+     * </ul>
+     * Performs lazy expiry before the check.
+     */
+    public long remainingTtlMs(String key) {
+        if (expireIfNeeded(key)) return -2;
+        if (!exists(key))        return -2;
+        Long exp = expiries.get(key);
+        if (exp == null)         return -1;
+        long rem = exp - System.currentTimeMillis();
+        return rem <= 0 ? -2 : rem;
+    }
+
+    /**
+     * Active expiry: scans up to {@code maxSample} entries in the expiry map and deletes any that
+     * have already passed. Called by {@link dev.devgurav.mnemo.ttl.TtlSweeper} on the shard thread
+     * before each command. Does not allocate if no keys are expired (early exit).
+     */
+    public void sweepExpiredKeys(int maxSample) {
+        if (expiries.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        List<String> toDelete = null;
+        int sampled = 0;
+        for (Map.Entry<String, Long> entry : expiries.entrySet()) {
+            if (sampled++ >= maxSample) break;
+            if (now >= entry.getValue()) {
+                if (toDelete == null) toDelete = new ArrayList<>();
+                toDelete.add(entry.getKey());
+            }
+        }
+        if (toDelete == null) return;
+        for (String key : toDelete) {
+            store.remove(key);
+            zsets.remove(key);
+            hashes.remove(key);
+            lists.remove(key);
+            expiries.remove(key);
+            expiredKeys++;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Keyspace scan
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns all live (non-expired) keys in all four namespaces that satisfy {@code filter}.
+     * Used by the {@code KEYS} command.
      */
     public List<String> keys(Predicate<String> filter) {
+        long now = System.currentTimeMillis();
         List<String> result = new ArrayList<>();
-        Consumer<String> collect = key -> { if (filter.test(key)) result.add(key); };
+        Consumer<String> collect = key -> {
+            Long exp = expiries.get(key);
+            if (exp != null && now >= exp) return; // skip expired (lazy clean-up deferred)
+            if (filter.test(key)) result.add(key);
+        };
         store.forEachKey(collect);
         zsets.keySet().forEach(collect);
         hashes.keySet().forEach(collect);
@@ -153,20 +300,23 @@ public final class Db {
         return result;
     }
 
-    // --- Memory accounting (for maxmemory / INFO) ---
+    // -------------------------------------------------------------------------
+    // Memory accounting (for maxmemory / INFO)
+    // -------------------------------------------------------------------------
 
     /**
      * The running logical size in bytes of the evictable (string) keyspace — maintained by the
      * backing {@link KeyValueStore} on every put/remove, so the read is O(1). This is the figure the
-     * {@code maxmemory} bound and {@code INFO}'s {@code used_memory} are measured against. Sorted
-     * sets, hashes, and lists are not weighed here: the random-sampling LRU evictor frees only string
-     * keys, so the bound it enforces is defined over exactly what it can reclaim.
+     * {@code maxmemory} bound and {@code INFO}'s {@code used_memory} are measured against.
      */
-    public long usedMemory() { return store.usedMemory(); }
+    public long usedMemory()      { return store.usedMemory(); }
 
-    /** Cumulative number of keys removed by the evictor since startup (an {@code INFO} stat). */
-    public long evictedKeys() { return evictedKeys; }
+    /** Cumulative keys removed by the evictor since startup. */
+    public long evictedKeys()     { return evictedKeys; }
 
-    /** Called by the evictor after it deletes a sampled victim, to advance the {@code INFO} stat. */
-    public void recordEviction() { evictedKeys++; }
+    /** Cumulative keys removed by TTL expiry (lazy or active) since startup. */
+    public long expiredKeys()     { return expiredKeys; }
+
+    /** Called by the evictor after it deletes a sampled victim. */
+    public void recordEviction()  { evictedKeys++; }
 }

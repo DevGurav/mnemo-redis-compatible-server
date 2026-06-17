@@ -32,11 +32,20 @@ public final class DictEntry {
     /**
      * Recency stamp for the approximate-LRU evictor: the value of the owning {@link
      * dev.devgurav.mnemo.store.Dict}'s logical access clock at this entry's last read or write.
-     * A larger value means more recently used; the evictor evicts the smallest it samples. A logical
-     * clock (a monotonically incremented counter) is used rather than wall-clock time so updating it
-     * on every access costs an increment, not a {@code System.currentTimeMillis()} syscall.
+     * A larger value means more recently used; the evictor evicts the smallest it samples.
      */
     public long lruTime;
+
+    /**
+     * Approximated access-frequency for the LFU evictor (ADR 0012). Implemented as a saturating
+     * Morris counter (0–255): new entries start at {@code LFU_INIT} and increment probabilistically
+     * on each access so that high-frequency keys saturate slowly (log-scale). A smaller value means
+     * less frequently used; the LFU evictor evicts the smallest it samples.
+     */
+    public int lfu;
+
+    /** Initial LFU value for newly inserted entries — same as Redis {@code LFU_INIT_VAL = 5}. */
+    public static final int LFU_INIT = 5;
 
     /** Pool-allocated nodes are constructed once by {@link DictEntryPool}; callers use acquire(). */
     public DictEntry() {}
@@ -48,4 +57,5 @@ public final class DictEntry {
     public DictEntry next() { return next; }
     public int hash()       { return hash; }
     public long lruTime()   { return lruTime; }
+    public int lfu()        { return lfu; }
 }

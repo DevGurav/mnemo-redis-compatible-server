@@ -28,3 +28,5 @@ settled question.
 | [0008](0008-hash-type.md) | Hash type as a third namespace reusing `Dict`; keyspace unification deferred to W3–W4 | Accepted |
 | [0009](0009-list-type-and-info.md) | List type as a fourth namespace with a `ListNode` pool, plus the `INFO` endpoint; unification deferred to the W4 sharding rework | Accepted |
 | [0010](0010-random-sampling-lru-eviction.md) | Random-sampling approximate LRU eviction (allocation-free sampler) + logical access clock; implements 0006 | Accepted |
+| [0011](0011-ttl-lazy-and-active-expiry.md) | TTL expiry: lazy check on every read + active sweep driven from the shard thread (no timer thread) | Accepted |
+| [0012](0012-lfu-eviction-policy.md) | LFU eviction via Morris counter on `DictEntry.lfu`; same random-sampling loop as ADR 0010 | Accepted |

@@ -8,6 +8,8 @@ import dev.devgurav.mnemo.store.Dict;
 import dev.devgurav.mnemo.store.HashMapStore;
 import dev.devgurav.mnemo.store.KeyValueStore;
 import dev.devgurav.mnemo.store.evict.Evictor;
+import dev.devgurav.mnemo.store.evict.EvictionPolicy;
+import dev.devgurav.mnemo.ttl.TtlSweeper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
@@ -48,15 +50,17 @@ public final class MnemoServer implements AutoCloseable {
         KeyValueStore store = config.useDict() ? new Dict() : new HashMapStore();
         Db db = new Db(store);
         ServerStats stats = new ServerStats();
-        CommandRegistry registry = CommandRegistry.standard(stats, config.maxmemory());
+        EvictionPolicy policy = config.evictionPolicy();
+        CommandRegistry registry = CommandRegistry.standard(stats, config.maxmemory(), policy);
 
         // Eviction needs a bound AND a Dict to sample (the sampler reads Dict bucket arrays). With the
         // placeholder HashMapStore there is nothing to sample, so the bound is simply not enforced.
         Evictor evictor = (config.maxmemory() > 0 && store instanceof Dict dict)
-                ? new Evictor(dict, db, config.maxmemory())
+                ? new Evictor(dict, db, config.maxmemory(), Evictor.DEFAULT_SAMPLE_SIZE, policy)
                 : null;
 
-        shard = new ShardExecutor(0, registry, db, evictor);
+        TtlSweeper sweeper = new TtlSweeper(db);
+        shard = new ShardExecutor(0, registry, db, evictor, sweeper);
         shard.start();
 
         bossGroup   = new NioEventLoopGroup(1);
@@ -91,6 +95,7 @@ public final class MnemoServer implements AutoCloseable {
         System.out.println("Mnemo listening on port " + port
                 + " (store=" + (config.useDict() ? "Dict" : "HashMapStore")
                 + ", maxmemory=" + (config.maxmemory() > 0 ? config.maxmemory() + " bytes" : "unlimited")
+                + ", eviction=" + config.evictionPolicy().toConfigString()
                 + ")");
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
         server.awaitTermination();
