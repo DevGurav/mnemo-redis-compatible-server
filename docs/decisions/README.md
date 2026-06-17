@@ -30,3 +30,4 @@ settled question.
 | [0010](0010-random-sampling-lru-eviction.md) | Random-sampling approximate LRU eviction (allocation-free sampler) + logical access clock; implements 0006 | Accepted |
 | [0011](0011-ttl-lazy-and-active-expiry.md) | TTL expiry: lazy check on every read + active sweep driven from the shard thread (no timer thread) | Accepted |
 | [0012](0012-lfu-eviction-policy.md) | LFU eviction via Morris counter on `DictEntry.lfu`; same random-sampling loop as ADR 0010 | Accepted |
+| [0013](0013-aof-persistence.md) | AOF persistence: RESP-encoded write log, `force(false)` durability, synchronous startup replay | Accepted |

@@ -1,5 +1,7 @@
 package dev.devgurav.mnemo.server;
 
+import dev.devgurav.mnemo.aof.AofReplayer;
+import dev.devgurav.mnemo.aof.AofWriter;
 import dev.devgurav.mnemo.command.CommandRegistry;
 import dev.devgurav.mnemo.net.MnemoChannelInitializer;
 import dev.devgurav.mnemo.shard.ShardExecutor;
@@ -16,7 +18,9 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.file.Path;
 
 /**
  * Mnemo server bootstrap.
@@ -40,6 +44,7 @@ public final class MnemoServer implements AutoCloseable {
     private EventLoopGroup workerGroup;
     private ShardExecutor shard;
     private Channel serverChannel;
+    private AofWriter aof;
 
     public MnemoServer(Config config) {
         this.config = config;
@@ -60,7 +65,22 @@ public final class MnemoServer implements AutoCloseable {
                 : null;
 
         TtlSweeper sweeper = new TtlSweeper(db);
-        shard = new ShardExecutor(0, registry, db, evictor, sweeper);
+
+        // AOF: replay existing log before accepting connections, then open writer for appends.
+        if (config.aofPath() != null) {
+            Path aofPath = Path.of(config.aofPath());
+            try {
+                int replayed = AofReplayer.replay(aofPath, registry, db);
+                if (replayed > 0) {
+                    System.out.println("AOF: replayed " + replayed + " commands from " + aofPath);
+                }
+                aof = new AofWriter(aofPath);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to initialise AOF at " + aofPath, e);
+            }
+        }
+
+        shard = new ShardExecutor(0, registry, db, evictor, sweeper, aof);
         shard.start();
 
         bossGroup   = new NioEventLoopGroup(1);
@@ -86,6 +106,7 @@ public final class MnemoServer implements AutoCloseable {
         if (bossGroup    != null) bossGroup.shutdownGracefully();
         if (workerGroup  != null) workerGroup.shutdownGracefully();
         if (shard        != null) shard.shutdown();
+        if (aof          != null) try { aof.close(); } catch (IOException ignored) {}
     }
 
     public static void main(String[] args) throws Exception {
@@ -96,6 +117,7 @@ public final class MnemoServer implements AutoCloseable {
                 + " (store=" + (config.useDict() ? "Dict" : "HashMapStore")
                 + ", maxmemory=" + (config.maxmemory() > 0 ? config.maxmemory() + " bytes" : "unlimited")
                 + ", eviction=" + config.evictionPolicy().toConfigString()
+                + ", aof=" + (config.aofPath() != null ? config.aofPath() : "disabled")
                 + ")");
         Runtime.getRuntime().addShutdownHook(new Thread(server::close));
         server.awaitTermination();

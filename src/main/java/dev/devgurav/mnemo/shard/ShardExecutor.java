@@ -1,5 +1,6 @@
 package dev.devgurav.mnemo.shard;
 
+import dev.devgurav.mnemo.aof.AofWriter;
 import dev.devgurav.mnemo.command.CommandRegistry;
 import dev.devgurav.mnemo.net.ParsedCommand;
 import dev.devgurav.mnemo.net.resp.RespValue;
@@ -8,8 +9,11 @@ import dev.devgurav.mnemo.store.evict.Evictor;
 import dev.devgurav.mnemo.ttl.TtlSweeper;
 import org.jctools.queues.MpscArrayQueue;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * The data-plane executor for one shard.
@@ -38,29 +42,50 @@ public final class ShardExecutor {
 
     private static final int QUEUE_CAPACITY = 4096;
 
+    /**
+     * Commands that mutate state and must be recorded in the AOF. Read-only commands
+     * (GET, EXISTS, TTL, INFO, KEYS, …) are not in this set.
+     */
+    private static final Set<String> WRITE_COMMANDS = Set.of(
+            "SET", "DEL",
+            "INCR", "DECR", "INCRBY", "DECRBY",
+            "HSET", "HDEL",
+            "LPUSH", "RPUSH", "LPOP", "RPOP",
+            "ZADD",
+            "EXPIRE", "PEXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST",
+            "FLUSHDB", "FLUSHALL"
+    );
+
     private final MpscArrayQueue<ParsedCommand> queue;
     private final CommandRegistry registry;
     private final Db db;
     private final Evictor evictor;     // null when maxmemory is unset or the store is not evictable
     private final TtlSweeper sweeper;  // null when no TTL-aware Db is provided
+    private final AofWriter aof;       // null when AOF persistence is disabled
     private final Thread thread;
 
     private volatile boolean running;
 
     public ShardExecutor(int id, CommandRegistry registry, Db db) {
-        this(id, registry, db, null, null);
+        this(id, registry, db, null, null, null);
     }
 
     public ShardExecutor(int id, CommandRegistry registry, Db db, Evictor evictor) {
-        this(id, registry, db, evictor, null);
+        this(id, registry, db, evictor, null, null);
     }
 
     public ShardExecutor(int id, CommandRegistry registry, Db db, Evictor evictor, TtlSweeper sweeper) {
+        this(id, registry, db, evictor, sweeper, null);
+    }
+
+    public ShardExecutor(int id, CommandRegistry registry, Db db, Evictor evictor,
+                         TtlSweeper sweeper, AofWriter aof) {
         this.queue    = new MpscArrayQueue<>(QUEUE_CAPACITY);
         this.registry = registry;
         this.db       = db;
         this.evictor  = evictor;
         this.sweeper  = sweeper;
+        this.aof      = aof;
         this.thread   = new Thread(this::loop, "mnemo-shard-" + id);
         this.thread.setDaemon(true);
     }
@@ -101,10 +126,6 @@ public final class ShardExecutor {
         while (running) {
             ParsedCommand cmd = queue.poll();
             if (cmd == null) {
-                // Queue is empty. Hint the CPU to yield pipeline resources to other threads
-                // during the spin; lower power consumption and better HT sibling performance.
-                // Week 2: replace with a LockSupport.parkNanos approach to trade a few
-                // microseconds of latency for a zero-CPU idle path.
                 Thread.onSpinWait();
                 continue;
             }
@@ -122,15 +143,18 @@ public final class ShardExecutor {
         RespValue reply;
         try {
             if (sweeper != null) sweeper.sweepIfDue();
-            // Enforce the maxmemory bound before the command runs, so a write never grows the
-            // keyspace past the budget without first reclaiming room (Redis pre-command eviction).
             if (evictor != null) evictor.evictIfNeeded();
             reply = registry.dispatch(db, argList);
         } catch (RuntimeException e) {
             reply = RespValue.error("ERR " + e.getMessage());
         }
-        // channel().writeAndFlush() starts from the pipeline tail, passing through RespEncoder.
-        // ctx.writeAndFlush() would start from the decoder's position, skipping the encoder.
+        // Log successful write commands to the AOF (before flushing to the client).
+        if (aof != null && !(reply instanceof RespValue.ErrorReply) && !argList.isEmpty()) {
+            String name = new String(argList.get(0), StandardCharsets.UTF_8).toUpperCase(Locale.ROOT);
+            if (WRITE_COMMANDS.contains(name)) {
+                aof.append(argList);
+            }
+        }
         cmd.ctx().channel().writeAndFlush(reply);
     }
 }

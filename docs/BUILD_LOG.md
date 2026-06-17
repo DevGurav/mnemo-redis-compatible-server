@@ -2,6 +2,42 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 3 — AOF persistence + crash-recovery
+
+Added append-only file persistence so data survives restarts and `kill -9` crashes.
+
+**Context.** TTL and LFU landed in the prior W3 push. AOF is the remaining durability story:
+without it, every restart wipes the keyspace, which contradicts any "production-ready" claim.
+
+**What was built.**
+
+- **`AofWriter`** — opens the log file with `APPEND` flag; serialises each write command as a
+  RESP multibulk frame (`*N\r\n($len\r\ndata\r\n) × N`) and calls `FileChannel.force(false)`
+  after each write (flushes to OS buffers, survives JVM crashes without syncing inode metadata).
+- **`AofReplayer`** — reads the file with `BufferedInputStream`, parses RESP multibulk frames
+  with an inline reader, and calls `CommandRegistry.dispatch()` for each. Errors on individual
+  commands are skipped so one corrupt entry does not abort full recovery. Returns the command count.
+- **Write whitelist in `ShardExecutor`** — `WRITE_COMMANDS` set (SET, DEL, INCR/DECR/INCRBY/DECRBY,
+  HSET/HDEL, LPUSH/RPUSH/LPOP/RPOP, ZADD, EXPIRE/PEXPIRE/EXPIREAT/PEXPIREAT/PERSIST,
+  FLUSHDB/FLUSHALL). After each successful dispatch (reply is not `ErrorReply`), if the command is
+  in the whitelist, `aof.append(argList)` logs the raw bytes.
+- **`Config.aofPath`** — null = disabled; `--aof-path` / `MNEMO_AOF_PATH` to enable.
+- **`MnemoServer`** — replays the AOF synchronously *before* binding the server socket (clients
+  cannot observe partial state), then opens the writer for live appends. `close()` flushes and
+  closes the writer.
+- **`AofPersistenceTest`** — two integration tests: `keysSurviveRestartViaAof` writes
+  strings/hash/list entries, closes the server, boots a fresh instance, and asserts all keys are
+  readable; `deletedKeyDoesNotSurviveRestart` proves SET+DEL replay leaves the key absent.
+
+**Verification.** `./gradlew clean test` → **117 green** (+2 `AofPersistenceTest`); `specTest` →
+60 (unchanged). AOF file is non-empty after writes, and a second server instance correctly
+reconstructs state without any shared in-memory reference to the first.
+
+**Decision recorded.** [ADR 0013](decisions/0013-aof-persistence.md).
+
+**What's next.** Remaining W3 items: `DictEntry` pool profiling JMH benchmark, ZGC/JFR/Epsilon
+GC pass (documented in benchmarking-methodology.md).
+
 ## Week 3 — TTL expiry + LFU eviction policy
 
 Added per-key time-to-live and a second eviction policy to the server.

@@ -47,9 +47,10 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
   — [ADR 0006](decisions/0006-logical-maxmemory.md) / [ADR 0010](decisions/0010-random-sampling-lru-eviction.md)
 - ✅ LFU eviction policy — Morris counter (`DictEntry.lfu`), `EvictionPolicy` enum, `--eviction-policy`
   config flag, `INFO` reports live policy — [ADR 0012](decisions/0012-lfu-eviction-policy.md)
-- ⬜ `DictEntry` object pool: async-profiler allocation comparison
-- ⬜ AOF persistence + crash-recovery test
-- ⬜ ZGC / JFR / Epsilon GC pass
+- ⬜ `DictEntry` object pool: async-profiler allocation comparison (benchmark docs)
+- ✅ AOF persistence + crash-recovery test — `AofWriter`/`AofReplayer`, write whitelist in shard,
+  synchronous startup replay, `Config.aofPath`, 2 integration tests — [ADR 0013](decisions/0013-aof-persistence.md)
+- ⬜ ZGC / JFR / Epsilon GC pass (benchmark docs)
 
 *Milestone target: survives `kill -9`; stays under `maxmemory` mid-rehash.*
 
