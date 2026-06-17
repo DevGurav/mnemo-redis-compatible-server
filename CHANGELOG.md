@@ -7,6 +7,8 @@ build week until it ships.
 ## [Unreleased] — Week 2
 
 ### Added
+- Hash type: `HSET` / `HGET` / `HGETALL` / `HDEL` / `HLEN`, each hash backed by a `Dict` per key,
+  plus a `Dict.forEach` iterator that stays correct mid incremental rehash. `TYPE` now reports `hash`.
 - Rehash latency benchmark: a `DictSTW` stop-the-world control plus `RehashBenchmark` /
   `RehashSpikeBenchmark`, quantifying incremental rehashing's ≈57× lower worst-case resize-trigger
   latency (stop-the-world 347.6 ms → incremental 6.1 ms). See docs/benchmarking-methodology.md.

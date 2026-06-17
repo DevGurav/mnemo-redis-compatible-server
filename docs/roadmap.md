@@ -28,7 +28,9 @@ Legend: ✅ done · 🔶 in progress · ⬜ not started
   over the wire, with a WRONGTYPE-guarded typed keyspace ([ADR 0007](decisions/0007-typed-keyspace.md))
 - ✅ `INCR` / `DECR` / `INCRBY` / `DECRBY` integer counters (overflow- and WRONGTYPE-guarded)
 - ✅ `TYPE` / `DBSIZE` / `FLUSHDB` / `FLUSHALL` keyspace commands
-- ⬜ Hashes, Lists; `KEYS` `INFO`
+- ✅ Hashes (`HSET`/`HGET`/`HGETALL`/`HDEL`/`HLEN`) on a per-key `Dict`, with a dual-table
+  `Dict.forEach` iterator ([ADR 0008](decisions/0008-hash-type.md))
+- ⬜ Lists; `KEYS` `INFO`
 - ⬜ Differential tests vs. a real Redis instance
 
 *Milestone target: first `redis-benchmark` numbers.*

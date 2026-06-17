@@ -2,6 +2,40 @@
 
 A running log of what was built and why. Newest first.
 
+## Week 2 (cont.) — Hashes (HSET/HGET/HGETALL/HDEL/HLEN) + the Dict iterator
+
+Added the third value type, and the dual-table iterator it required.
+
+**Context.** A Redis hash is a field→value map — exactly what the hand-built `Dict` already is. The
+one missing piece: `HGETALL` has to enumerate the whole hash, but `Dict` had no safe traversal, and
+during an incremental rehash a hash's entries are split across both internal tables.
+
+**What was built.**
+
+- **`Dict.forEach(BiConsumer<byte[],byte[]>)`** — walks `ht[0]` and, while rehashing, `ht[1]`. An
+  entry lives in exactly one table (migration *moves* nodes; new keys land in `ht[1]`), and buckets
+  below `rehashidx` are already drained to null, so every entry is yielded exactly once — including
+  mid-migration.
+- **A third keyspace namespace** in `Db` (`key → Dict`), reusing `Dict` for each hash. One-type-per-key
+  is preserved by extending the `WRONGTYPE` guards — every string/sorted-set command now also checks
+  `isHash`, and `TYPE` reports `hash`. ([ADR 0008](decisions/0008-hash-type.md).)
+- **`HSET`** (counts newly-added fields), **`HGET`**, **`HGETALL`** (via `forEach`), **`HDEL`** (drops
+  an emptied hash, per Redis), **`HLEN`**.
+
+**Verification.** `DictIteratorTest` (plumbing, in the `store` package so it can read the rehash state)
+asserts `forEach` completeness directly against an *active* rehash with entries proven to span both
+tables. `HashCommandsTest` drives `HGETALL` across field counts 1 → 100 — many of which leave the
+inner `Dict` mid-rehash — and asserts every field comes back. `./gradlew test` → **49 green** (+16);
+`specTest` → 60 (unchanged).
+
+**Decision recorded.** Hash landed as a third parallel namespace, *not* the [ADR 0007] keyspace
+unification — that's deferred to the W3–W4 keyspace/sharding rework, where a type-tagged keyspace
+`Dict` plus a centralized `typeOf` is the natural home for the now-repetitive `WRONGTYPE` guards
+([ADR 0008](decisions/0008-hash-type.md)).
+
+**What's next.** Lists (a genuinely new structure), then `INFO`; differential tests vs. a real
+`redis-server`. See [roadmap](roadmap.md).
+
 ## Week 2 (cont.) — Flagship benchmark: incremental vs stop-the-world rehash
 
 Closed the standing benchmark gap and put a defensible number on the project's headline claim.

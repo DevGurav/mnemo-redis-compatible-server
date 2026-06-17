@@ -20,7 +20,7 @@ MNEMO_USE_DICT=true ./gradlew run   # run on the from-scratch Dict
 ./gradlew jmh        # JMH benchmarks (src/jmh/)
 ```
 
-Current state: `./gradlew test` → 33 green; `./gradlew specTest` → 60 green.
+Current state: `./gradlew test` → 49 green; `./gradlew specTest` → 60 green.
 
 ## Where things live
 
@@ -28,7 +28,7 @@ Current state: `./gradlew test` → 33 green; `./gradlew specTest` → 60 green.
 src/main/java/dev/devgurav/mnemo/
   server/   MnemoServer, Config
   net/      Netty pipeline + net/resp/ RESP2 codec + value model
-  command/  Command, CommandRegistry, handlers (strings/, server/, sortedset/)
+  command/  Command, CommandRegistry, handlers (strings/, server/, sortedset/, keyspace/, hashes/)
   store/    Db (typed keyspace), KeyValueStore, HashMapStore (placeholder), Dict, SkipList, ZSet, entry/ (pool)
 src/test/java/...   plumbing (green) + store specs (DictTest, DictPropertyTest, ZSetTest)
 src/jmh/java/...     DictBenchmark
